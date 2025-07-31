@@ -100,8 +100,8 @@ Avant Access provides a streamlined experience for Avant Development Group clien
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage.js"></script>
     <script>
       
-        const firebaseConfig = {
-    apiKey: "AIzaSyD3E7VY46cWK-4oKC6ZnSFNGZsg9jN3q0Q",
+const firebaseConfig = {  
+    apiKey: "AIzaSyD3E7VY46cWK-4oKC6ZnSFNGZsg9jN3q0Q",
     authDomain: "avant-access-hub-461ee.firebaseapp.com",
     projectId: "avant-access-hub-461ee",
     storageBucket: "avant-access-hub-461ee.firebasestorage.app",
