@@ -1,0 +1,9 @@
+const firebaseConfig = {
+    apiKey: "AIzaSyD3E7VY46cWK-4oKC6ZnSFNGZsg9jN3q0Q",
+    authDomain: "avant-access-hub-461ee.firebaseapp.com",
+    projectId: "avant-access-hub-461ee",
+    storageBucket: "avant-access-hub-461ee.firebasestorage.app",
+    messagingSenderId: "134634908235",
+    appId: "1:134634908235:web:25252f40e0fe472d8f3bce",
+    measurementId: "G-LNHWJMHEY8"
+  };
