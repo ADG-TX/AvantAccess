@@ -99,17 +99,16 @@ Avant Access provides a streamlined experience for Avant Development Group clien
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage.js"></script>
     <script>
-        // Firebase configuration (replace with your Firebase project details)
-        // PASTE YOUR FIREBASE CONFIG HERE FROM FIREBASE CONSOLE
+      
         const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_PROJECT_ID.appspot.com",
-            messagingSenderId: "YOUR_SENDER_ID",
-            appId: "YOUR_APP_ID"
-        };
-        firebase.initializeApp(firebaseConfig);
+    apiKey: "AIzaSyD3E7VY46cWK-4oKC6ZnSFNGZsg9jN3q0Q",
+    authDomain: "avant-access-hub-461ee.firebaseapp.com",
+    projectId: "avant-access-hub-461ee",
+    storageBucket: "avant-access-hub-461ee.firebasestorage.app",
+    messagingSenderId: "134634908235",
+    appId: "1:134634908235:web:25252f40e0fe472d8f3bce",
+    measurementId: "G-LNHWJMHEY8"
+  };        firebase.initializeApp(firebaseConfig);
         const storage = firebase.storage();
         // Form submission
         document.getElementById('hvacForm').addEventListener('submit', async (e) => {
