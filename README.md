@@ -110,12 +110,12 @@ Avant Access provides a streamlined experience for Avant Development Group clien
   measurementId: "G-LNHWJMHEY8"
 };
 firebase.initializeApp(firebaseConfig);
-        const storage = firebase.storage();
-        const analytics = firebase.analytics();
-        // Log page view
-        analytics.logEvent('page_view', { page_title: 'AvantAccess Form' });
-        // Form submission
-        document.getElementById('hvacForm').addEventListener('submit', async (e) => {
+const storage = firebase.storage();
+const analytics = firebase.analytics();
+ // Log page view
+analytics.logEvent('page_view', { page_title: 'AvantAccess Form' });
+// Form submission
+document.getElementById('hvacForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const name = document.getElementById('name').value;
             const phone = document.getElementById('phone').value;
