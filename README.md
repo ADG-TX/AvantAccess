@@ -99,7 +99,8 @@ Avant Access provides a streamlined experience for Avant Development Group clien
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage.js"></script>
     <script>
-      const firebaseConfig = 
+    //Firebase Configuration
+        const firebaseConfig = {
   apiKey: "AIzaSyD3E7VY46cWK-4oKC6ZnSFNGZsg9jN3q0Q",
   authDomain: "avant-access-hub-461ee.firebaseapp.com",
   projectId: "avant-access-hub-461ee",
@@ -107,7 +108,35 @@ Avant Access provides a streamlined experience for Avant Development Group clien
   messagingSenderId: "134634908235",
   appId: "1:134634908235:web:25252f40e0fe472d8f3bce",
   measurementId: "G-LNHWJMHEY8"
-
-
-;</body>
+};
+firebase.initializeApp(firebaseConfig);
+        const storage = firebase.storage();
+        const analytics = firebase.analytics();
+        // Log page view
+        analytics.logEvent('page_view', { page_title: 'AvantAccess Form' });
+        // Form submission
+        document.getElementById('hvacForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('name').value;
+            const phone = document.getElementById('phone').value;
+            const garage = document.getElementById('garage').value;
+            const design = document.getElementById('design').files[0];
+            let designUrl = '';
+            try {
+                if (design) {
+                    const storageRef = storage.ref(`designs/${garage}_${Date.now()}_${design.name}`);
+                    await storageRef.put(design);
+                    designUrl = await storageRef.getDownloadURL();
+                    console.log('File uploaded successfully:', designUrl);
+                    analytics.logEvent('file_upload', { garage_number: garage, file_name: design.name });
+                }
+                document.getElementById('status').classList.remove('hidden');
+                document.getElementById('hvacForm').reset();
+            } catch (error) {
+                console.error('Upload error:', error);
+                alert('Error submitting form: ' + error.message);
+            }
+        });
+    </script>
+</body>
 </html>
