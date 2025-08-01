@@ -99,7 +99,7 @@ Avant Access provides a streamlined experience for Avant Development Group clien
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage.js"></script>
     <script>
-      const firebaseConfig = {
+      const firebaseConfig = 
   apiKey: "AIzaSyD3E7VY46cWK-4oKC6ZnSFNGZsg9jN3q0Q",
   authDomain: "avant-access-hub-461ee.firebaseapp.com",
   projectId: "avant-access-hub-461ee",
@@ -107,7 +107,7 @@ Avant Access provides a streamlined experience for Avant Development Group clien
   messagingSenderId: "134634908235",
   appId: "1:134634908235:web:25252f40e0fe472d8f3bce",
   measurementId: "G-LNHWJMHEY8"
-  }
+
 
 ;</body>
 </html>
