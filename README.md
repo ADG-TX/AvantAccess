@@ -136,7 +136,9 @@ document.getElementById('hvacForm').addEventListener('submit', async (e) => {
                 console.error('Upload error:', error);
                 alert('Error submitting form: ' + error.message);
             }
-        });
-    </script>
+       });
+        
+curl -sL https://firebase.tools | bash    </script>
+    
 </body>
 </html>
