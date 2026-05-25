@@ -1,0 +1,1271 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GOTA HVAC Management — Avant Development Group</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#030712;color:#f3f4f6;font-family:'Inter',system-ui,sans-serif;overflow-x:hidden}
+
+    /* ── Unit cells ── */
+    .unit-cell{display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;cursor:pointer;border-radius:4px;border:1px solid;transition:transform .12s,box-shadow .12s;user-select:none;letter-spacing:.01em}
+    .unit-cell:hover{transform:scale(1.12);z-index:20;position:relative;box-shadow:0 0 0 2px #60a5fa}
+    .unit-good      {background:#064e3b;border-color:#10b981;color:#6ee7b7}
+    .unit-due       {background:#78350f;border-color:#f59e0b;color:#fde68a}
+    .unit-overdue   {background:#7f1d1d;border-color:#ef4444;color:#fca5a5}
+    .unit-unconfigured{background:#111827;border-color:#374151;color:#6b7280}
+    .unit-selected  {outline:2px solid #3b82f6;outline-offset:2px}
+    .unit-dimmed    {opacity:.18;pointer-events:none}
+
+    /* ── Panel slide-in ── */
+    #detailPanel{transition:transform .22s cubic-bezier(.4,0,.2,1)}
+
+    /* ── Tabs ── */
+    .tab-btn{padding:8px 12px;font-size:11px;font-weight:600;color:#6b7280;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;transition:color .15s}
+    .tab-btn:hover{color:#d1d5db}
+    .tab-btn.active{color:#60a5fa;border-bottom-color:#3b82f6}
+    .tab-content{display:none}
+    .tab-content.active{display:block}
+
+    /* ── Inputs ── */
+    input,textarea,select{
+      background:#1f2937;border:1px solid #374151;color:#f9fafb;
+      border-radius:6px;padding:7px 10px;font-size:13px;width:100%;outline:none;
+      transition:border-color .15s;font-family:inherit
+    }
+    input:focus,textarea:focus,select:focus{border-color:#3b82f6}
+    input[readonly]{opacity:.6;cursor:default}
+
+    /* ── Buttons ── */
+    .btn{padding:7px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid transparent;transition:background .15s,opacity .15s;display:inline-flex;align-items:center;justify-content:center;gap:5px;text-decoration:none;white-space:nowrap}
+    .btn-blue  {background:#1d4ed8;color:#fff;border-color:#3b82f6}.btn-blue:hover{background:#1e40af}
+    .btn-green {background:#064e3b;color:#6ee7b7;border-color:#10b981}.btn-green:hover{background:#065f46}
+    .btn-amber {background:#78350f;color:#fde68a;border-color:#f59e0b}.btn-amber:hover{background:#92400e}
+    .btn-red   {background:#7f1d1d;color:#fca5a5;border-color:#ef4444}.btn-red:hover{background:#991b1b}
+    .btn-gray  {background:#1f2937;color:#d1d5db;border-color:#374151}.btn-gray:hover{background:#374151}
+
+    /* ── Modals ── */
+    .modal-wrap{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(3px);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px}
+    .modal-box{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
+
+    /* ── Scrollbars ── */
+    ::-webkit-scrollbar{width:5px;height:5px}
+    ::-webkit-scrollbar-track{background:#111827}
+    ::-webkit-scrollbar-thumb{background:#374151;border-radius:3px}
+
+    /* ── History timeline ── */
+    .hist-item{border-left:2px solid #1d4ed8;padding-left:14px;padding-bottom:18px;position:relative}
+    .hist-item::before{content:'';position:absolute;left:-5px;top:3px;width:8px;height:8px;background:#3b82f6;border-radius:50%}
+    .hist-item:last-child{padding-bottom:0;border-left-color:transparent}
+
+    /* ── Stat cards ── */
+    .stat-card{background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:10px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+
+    /* ── Map building groups ── */
+    .map-strip{display:flex;flex-direction:column;gap:10px}
+    .bldg-group{background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:8px 7px}
+    .bldg-label{font-size:9px;font-weight:800;color:#4b5563;text-transform:uppercase;letter-spacing:.08em;text-align:center;margin-bottom:5px}
+    .units-grid{display:flex;flex-direction:column;gap:3px}
+    .unit-row{display:flex;gap:3px}
+
+    /* ── Toast ── */
+    #toast{position:fixed;bottom:20px;right:20px;background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;z-index:99;display:flex;align-items:center;gap:8px;box-shadow:0 10px 25px rgba(0,0,0,.5);transform:translateY(80px);opacity:0;transition:transform .25s,opacity .25s}
+    #toast.show{transform:translateY(0);opacity:1}
+
+    /* ── Responsive panel ── */
+    @media(max-width:768px){
+      #detailPanel{position:fixed;inset:0;width:100%!important;z-index:40}
+    }
+
+    /* ── Photo upload zone ── */
+    .photo-drop-zone{
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      border:2px dashed #334155;border-radius:10px;padding:24px 16px;cursor:pointer;
+      transition:border-color .2s,background .2s;text-align:center;gap:6px
+    }
+    .photo-drop-zone:hover,.photo-drop-zone.drag-over{border-color:#3b82f6;background:#0c1a2e}
+
+    /* ── Photo grid ── */
+    .photo-card{position:relative;border-radius:8px;overflow:hidden;border:1px solid #1e293b;background:#0f172a;transition:border-color .15s}
+    .photo-card:hover{border-color:#334155}
+    .photo-card img{width:100%;height:110px;object-fit:cover;cursor:pointer;display:block}
+    .photo-del-btn{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.72);border:none;color:#f87171;cursor:pointer;padding:3px 7px;border-radius:4px;font-size:11px;font-weight:800;line-height:1;transition:background .15s}
+    .photo-del-btn:hover{background:rgba(127,29,29,.9)}
+
+    /* ── Lightbox ── */
+    #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:200;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;cursor:pointer}
+    #lightbox.open{display:flex}
+    #lightbox img{max-width:90vw;max-height:82vh;border-radius:8px;object-fit:contain;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+    #lightboxCaption{font-size:12px;color:#94a3b8}
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════
+     HEADER
+═══════════════════════════════════════════════ -->
+<header style="background:#080f1a;border-bottom:1px solid #1e293b;position:sticky;top:0;z-index:30">
+  <div style="padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <!-- Brand -->
+    <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+      <div style="width:36px;height:36px;background:linear-gradient(135deg,#1d4ed8,#0ea5e9);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+        </svg>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:800;color:#f8fafc;line-height:1.1;letter-spacing:.02em">AVANT DEVELOPMENT GROUP</div>
+        <div style="font-size:10px;color:#64748b;letter-spacing:.04em">GOTA HVAC Management · Austin, TX</div>
+      </div>
+    </div>
+
+    <!-- Search -->
+    <div style="flex:1;min-width:180px;max-width:300px;position:relative">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="#64748b" stroke-width="2.5" style="position:absolute;left:9px;top:50%;transform:translateY(-50%)">
+        <circle cx="11" cy="11" r="8"></circle><path stroke-linecap="round" d="m21 21-4.35-4.35"></path>
+      </svg>
+      <input id="searchInput" type="text" placeholder="Search unit, owner, building…" style="padding-left:30px;font-size:12px" oninput="handleSearch(this.value)">
+    </div>
+
+    <!-- Status filter -->
+    <select id="statusFilter" onchange="handleFilter(this.value)" style="width:auto;font-size:12px;padding:7px 10px;flex-shrink:0">
+      <option value="all">All Status</option>
+      <option value="good">✅ Good</option>
+      <option value="due">⚠️ Due Soon</option>
+      <option value="overdue">🔴 Overdue</option>
+      <option value="unconfigured">⬜ Unconfigured</option>
+    </select>
+
+    <!-- View toggle -->
+    <div style="display:flex;gap:3px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:3px;flex-shrink:0">
+      <button id="btnMap" onclick="setView('map')" class="btn btn-blue" style="font-size:11px;padding:5px 12px">🗺 Map</button>
+      <button id="btnList" onclick="setView('list')" class="btn btn-gray" style="font-size:11px;padding:5px 12px">☰ List</button>
+    </div>
+
+    <!-- Reset -->
+    <button onclick="confirmReset()" class="btn btn-gray" style="font-size:10px;padding:4px 10px;opacity:.5" title="Reset all data">↺ Reset</button>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════
+     STATS BAR
+═══════════════════════════════════════════════ -->
+<div style="background:#080f1a;border-bottom:1px solid #1e293b;padding:8px 16px">
+  <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;align-items:center">
+    <div class="stat-card">
+      <span style="font-size:22px;font-weight:800;color:#f1f5f9" id="statTotal">152</span>
+      <span style="font-size:11px;color:#64748b">Total<br>Units</span>
+    </div>
+    <div class="stat-card">
+      <div style="width:8px;height:8px;border-radius:50%;background:#10b981;flex-shrink:0"></div>
+      <span style="font-size:20px;font-weight:800;color:#34d399" id="statGood">—</span>
+      <span style="font-size:11px;color:#64748b">Good</span>
+    </div>
+    <div class="stat-card">
+      <div style="width:8px;height:8px;border-radius:50%;background:#f59e0b;flex-shrink:0"></div>
+      <span style="font-size:20px;font-weight:800;color:#fbbf24" id="statDue">—</span>
+      <span style="font-size:11px;color:#64748b">Due<br>Soon</span>
+    </div>
+    <div class="stat-card">
+      <div style="width:8px;height:8px;border-radius:50%;background:#ef4444;flex-shrink:0"></div>
+      <span style="font-size:20px;font-weight:800;color:#f87171" id="statOverdue">—</span>
+      <span style="font-size:11px;color:#64748b">Overdue</span>
+    </div>
+    <div class="stat-card">
+      <div style="width:8px;height:8px;border-radius:50%;background:#374151;flex-shrink:0"></div>
+      <span style="font-size:20px;font-weight:800;color:#6b7280" id="statUnconfig">—</span>
+      <span style="font-size:11px;color:#64748b">Unconfig</span>
+    </div>
+    <div class="stat-card" style="margin-left:4px;border-color:#1e3a5f;background:#0c1a2e">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="#60a5fa" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+      <span style="font-size:13px;font-weight:700;color:#93c5fd">Next 30 days: <span id="statUpcoming" style="color:#60a5fa;font-size:18px;font-weight:800">—</span> due</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     MAIN LAYOUT
+═══════════════════════════════════════════════ -->
+<div style="display:flex;height:calc(100vh - 128px)">
+
+  <!-- ── MAP VIEW ── -->
+  <div id="mapView" style="flex:1;overflow:auto;padding:16px">
+    <div id="siteMap" style="display:flex;gap:14px;min-width:max-content"></div>
+    <!-- Legend -->
+    <div style="display:flex;gap:16px;margin-top:14px;padding:10px 14px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;width:fit-content;flex-wrap:wrap">
+      <span style="font-size:10px;font-weight:700;color:#64748b;letter-spacing:.06em;text-transform:uppercase;align-self:center">Legend:</span>
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#94a3b8"><div style="width:18px;height:12px;border-radius:3px;background:#064e3b;border:1px solid #10b981"></div>Good</div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#94a3b8"><div style="width:18px;height:12px;border-radius:3px;background:#78350f;border:1px solid #f59e0b"></div>Due Soon</div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#94a3b8"><div style="width:18px;height:12px;border-radius:3px;background:#7f1d1d;border:1px solid #ef4444"></div>Overdue</div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#94a3b8"><div style="width:18px;height:12px;border-radius:3px;background:#111827;border:1px solid #374151"></div>Unconfigured</div>
+    </div>
+  </div>
+
+  <!-- ── LIST VIEW ── -->
+  <div id="listView" style="flex:1;overflow:auto;display:none">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="background:#0f172a;position:sticky;top:0;z-index:5">
+          <th style="text-align:left;padding:10px 14px;color:#64748b;font-size:11px;font-weight:700;letter-spacing:.04em;border-bottom:1px solid #1e293b">UNIT</th>
+          <th style="text-align:left;padding:10px 14px;color:#64748b;font-size:11px;font-weight:700;letter-spacing:.04em;border-bottom:1px solid #1e293b">BUILDING</th>
+          <th style="text-align:left;padding:10px 14px;color:#64748b;font-size:11px;font-weight:700;letter-spacing:.04em;border-bottom:1px solid #1e293b">STATUS</th>
+          <th style="text-align:left;padding:10px 14px;color:#64748b;font-size:11px;font-weight:700;letter-spacing:.04em;border-bottom:1px solid #1e293b">OWNER</th>
+          <th style="text-align:left;padding:10px 14px;color:#64748b;font-size:11px;font-weight:700;letter-spacing:.04em;border-bottom:1px solid #1e293b">LAST SERVICE</th>
+          <th style="text-align:left;padding:10px 14px;color:#64748b;font-size:11px;font-weight:700;letter-spacing:.04em;border-bottom:1px solid #1e293b">NEXT SERVICE</th>
+          <th style="text-align:left;padding:10px 14px;color:#64748b;font-size:11px;font-weight:700;letter-spacing:.04em;border-bottom:1px solid #1e293b">HVAC MODEL</th>
+        </tr>
+      </thead>
+      <tbody id="listBody"></tbody>
+    </table>
+  </div>
+
+  <!-- ── DETAIL PANEL ── -->
+  <div id="detailPanel" style="width:430px;flex-shrink:0;border-left:1px solid #1e293b;background:#080f1a;overflow-y:auto;display:none"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     LIGHTBOX
+═══════════════════════════════════════════════ -->
+<div id="lightbox" onclick="closeLightbox()">
+  <img id="lightboxImg" src="" alt="">
+  <div id="lightboxCaption"></div>
+  <div style="font-size:11px;color:#475569;margin-top:-6px">Click anywhere to close</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     MODAL: LOG SERVICE
+═══════════════════════════════════════════════ -->
+<div id="logModal" class="modal-wrap" style="display:none" onclick="if(event.target===this)closeModal('logModal')">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <h3 style="font-size:16px;font-weight:800;margin-bottom:16px">📋 Log Service Work — Unit <span id="logUnitLabel"></span></h3>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px">Date</label>
+        <input type="date" id="logDate"></div>
+      <div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px">Technician</label>
+        <input type="text" id="logTech" placeholder="Tech name"></div>
+      <div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px">Work Performed</label>
+        <textarea id="logAction" rows="4" placeholder="Describe work done…" style="resize:vertical"></textarea></div>
+      <div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px">Set Status After Service</label>
+        <select id="logStatus">
+          <option value="good">✅ Good — All systems normal</option>
+          <option value="due">⚠️ Due Soon — Monitor closely</option>
+          <option value="overdue">🔴 Needs Follow-up</option>
+        </select></div>
+      <div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px">Next Service Date</label>
+        <input type="date" id="logNext"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn btn-blue" style="flex:1" onclick="submitLog()">💾 Save Entry</button>
+      <button class="btn btn-gray" onclick="closeModal('logModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     MODAL: SCHEDULE
+═══════════════════════════════════════════════ -->
+<div id="scheduleModal" class="modal-wrap" style="display:none" onclick="if(event.target===this)closeModal('scheduleModal')">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <h3 style="font-size:16px;font-weight:800;margin-bottom:16px">📅 Schedule Maintenance — Unit <span id="schedUnitLabel"></span></h3>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px">Service Date</label>
+        <input type="date" id="schedDate"></div>
+      <div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px">Service Type</label>
+        <select id="schedType">
+          <option>Annual Maintenance</option>
+          <option>Semi-Annual Maintenance</option>
+          <option>Filter Replacement</option>
+          <option>Repair</option>
+          <option>Inspection</option>
+          <option>Refrigerant Check</option>
+          <option>Emergency Service</option>
+        </select></div>
+      <div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px">Assigned Technician</label>
+        <input type="text" id="schedTech" placeholder="Tech name"></div>
+      <div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px">Notes</label>
+        <textarea id="schedNotes" rows="2" placeholder="Special instructions…" style="resize:vertical"></textarea></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn btn-blue" style="flex:1" onclick="submitSchedule()">📅 Schedule</button>
+      <button class="btn btn-gray" onclick="closeModal('scheduleModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     MODAL: TEXT MESSAGE
+═══════════════════════════════════════════════ -->
+<div id="textModal" class="modal-wrap" style="display:none" onclick="if(event.target===this)closeModal('textModal')">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <h3 style="font-size:16px;font-weight:800;margin-bottom:4px">📱 Send Text Message</h3>
+    <p style="font-size:11px;color:#64748b;margin-bottom:16px">Compose a message to the unit owner. (Twilio-ready)</p>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px">To</label>
+        <input type="text" id="textTo" readonly></div>
+      <div>
+        <label style="font-size:11px;color:#64748b;display:block;margin-bottom:6px">Quick Templates</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-gray" style="font-size:10px" onclick="applyTemplate('maintenance')">📋 Maintenance Reminder</button>
+          <button class="btn btn-gray" style="font-size:10px" onclick="applyTemplate('appointment')">📅 Appointment</button>
+          <button class="btn btn-gray" style="font-size:10px" onclick="applyTemplate('overdue')">⚠️ Overdue Notice</button>
+        </div>
+      </div>
+      <div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px">Message</label>
+        <textarea id="textMsg" rows="5" placeholder="Type message…" style="resize:vertical"></textarea></div>
+      <div style="font-size:11px;color:#475569">Character count: <span id="charCount">0</span>/160</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn btn-green" style="flex:1" onclick="sendText()">📤 Send Message</button>
+      <button class="btn btn-gray" onclick="closeModal('textModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- ═══════════════════════════════════════════════
+     FIREBASE (Storage for photo uploads)
+═══════════════════════════════════════════════ -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// FIREBASE INIT
+// ════════════════════════════════════════════════════════════
+let storage = null;
+let firebaseReady = false;
+
+(function initFirebase() {
+  try {
+    const cfg = {
+      apiKey: "AIzaSyD3E7VY46cWK-4oKC6ZnSFNGZsg9jN3q0Q",
+      authDomain: "avant-access-hub-461ee.firebaseapp.com",
+      projectId: "avant-access-hub-461ee",
+      storageBucket: "avant-access-hub-461ee.appspot.com",
+      messagingSenderId: "134634908235",
+      appId: "1:134634908235:web:25252f40e0fe472d8f3bce"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(cfg);
+    storage = firebase.storage();
+    firebaseReady = true;
+  } catch(e) {
+    console.warn('Firebase init failed:', e);
+  }
+})();
+
+// ════════════════════════════════════════════════════════════
+// BUILDING LAYOUT (mirrors GOTA site map)
+// ════════════════════════════════════════════════════════════
+const LAYOUT = [
+  { strip: 'Left Strip (20×50)', groups: [
+    { id:'B13', name:'Bldg 13', size:'20×50',
+      rows:[['1312','1313'],['1310','1311'],['1308','1307'],['1306','1305'],['1304','1303'],['1302','1301']] },
+    { id:'B14', name:'Bldg 14', size:'20×50',
+      rows:[['1402','1401'],['1404','1403'],['1406','1405'],['1408','1407'],['1410','1409'],['1412','1411'],['1414','1413'],['1416','1415']] },
+    { id:'B15', name:'Bldg 15', size:'20×50',
+      rows:[['1502','1501'],['1504','1503'],['1506','1505'],['1508','1507'],['1510','1509'],['1512','1511'],['1514','1513'],['1516','1515']] },
+  ]},
+  { strip: 'Center-Left (30×50)', groups: [
+    { id:'B10', name:'Bldg 10', size:'30×50',
+      rows:[['1012','1011'],['1010','1009'],['1008','1007'],['1006','1005'],['1004','1003'],['1002','1001']] },
+    { id:'B11', name:'Bldg 11', size:'30×50',
+      rows:[['1102','1101'],['1104','1103'],['1106','1105'],['1108','1107'],['1110','1109'],['1112','1111'],['1114','1113'],['1116','1115']] },
+    { id:'B12', name:'Bldg 12', size:'30×50',
+      rows:[['1202','1201'],['1204','1203'],['1206','1205'],['1208','1207'],['1210','1209'],['1212','1211'],['1214','1213'],['1216','1215']] },
+  ]},
+  { strip: 'Center (30×50)', groups: [
+    { id:'B7', name:'Bldg 7', size:'30×50',
+      rows:[['714','713'],['712','711'],['710','709'],['708','707'],['706','705'],['704','703'],['702','701']] },
+    { id:'B8', name:'Bldg 8', size:'30×50',
+      rows:[['802','803'],['804','805'],['806','807'],['808','809'],['810','811'],['812','813']] },
+    { id:'B9', name:'Bldg 9', size:'30×50',
+      rows:[['902','901'],['904','903'],['906','905'],['908','907'],['910','909'],['912','911'],['914','913'],['916','915']] },
+  ]},
+  { strip: 'Right Strip (25×50)', groups: [
+    { id:'B4', name:'Bldg 4', size:'25×50',
+      rows:[['414'],['412'],['410'],['408'],['406'],['404'],['402']] },
+    { id:'B5', name:'Bldg 5', size:'25×50',
+      rows:[['502'],['504'],['506'],['508'],['510'],['512'],['514'],['516']] },
+    { id:'B6', name:'Bldg 6', size:'25×50',
+      rows:[['602'],['604'],['606'],['608'],['610'],['612'],['614']] },
+  ]},
+];
+
+// ════════════════════════════════════════════════════════════
+// SAMPLE DATA (13 pre-populated units)
+// ════════════════════════════════════════════════════════════
+const SAMPLES = {
+  '502':{status:'good',hvacModel:'Mitsubishi MSZ-GL24NA',hvacBTU:'24,000',hvacSerial:'MXZ24-00421A',installDate:'2022-06-15',warrantyExpires:'2027-06-15',filterSize:'24×24×1',refrigerant:'R-410A',lastService:'2026-02-10',nextService:'2026-08-10',ownerName:'Robert Martinez',ownerPhone:'(512) 555-0142',ownerEmail:'rmartinez@email.com',notes:'Owner prefers morning appointments. Gate code: 4821.',photos:[],serviceHistory:[{date:'2026-02-10',action:'Semi-annual maintenance. Replaced filter, checked refrigerant levels — all normal.',tech:'Mike Torres'},{date:'2025-08-05',action:'Annual service. Cleaned evaporator and condenser coils, replaced filter.',tech:'Mike Torres'},{date:'2024-08-18',action:'Annual service. All systems normal, no issues found.',tech:'Jason Webb'}]},
+  '504':{status:'due',hvacModel:'Daikin 17 Series FTXB24AXVJU',hvacBTU:'24,000',hvacSerial:'DK24-11823B',installDate:'2021-04-20',warrantyExpires:'2026-04-20',filterSize:'20×20×1',refrigerant:'R-32',lastService:'2025-11-18',nextService:'2026-06-18',ownerName:'Diana Chen',ownerPhone:'(737) 555-0089',ownerEmail:'dchen@chen-co.com',notes:'WARRANTY EXPIRED April 2026! Document any issues carefully.',photos:[],serviceHistory:[{date:'2025-11-18',action:'Annual maintenance. Filter replacement, coil cleaning, refrigerant check. All normal.',tech:'Mike Torres'},{date:'2024-11-05',action:'Annual maintenance. Minor refrigerant top-off (0.5 lbs). Replaced filter.',tech:'Mike Torres'}]},
+  '508':{status:'overdue',hvacModel:'LG Art Cool Premier LSU180HSV5',hvacBTU:'18,000',hvacSerial:'LG18-55901C',installDate:'2020-09-10',warrantyExpires:'2025-09-10',filterSize:'16×20×1',refrigerant:'R-410A',lastService:'2025-04-22',nextService:'2025-10-22',ownerName:'James Thornton',ownerPhone:'(512) 555-0233',ownerEmail:'jthornton@thornton.biz',notes:'OVERDUE 7 MONTHS — Called 3x, no response. Try email. Warranty expired.',photos:[],serviceHistory:[{date:'2025-04-22',action:'Spring maintenance. Cleaned coils, replaced filter. Owner noted occasional loud noise — tightened fan mount.',tech:'Jason Webb'},{date:'2024-10-01',action:'Annual maintenance. All normal.',tech:'Jason Webb'},{date:'2023-09-15',action:'Emergency call — capacitor replaced. Unit restored.',tech:'Mike Torres'}]},
+  '802':{status:'good',hvacModel:'Carrier 38MAQB18R-3',hvacBTU:'18,000',hvacSerial:'CA18-20231X',installDate:'2023-01-08',warrantyExpires:'2028-01-08',filterSize:'16×25×1',refrigerant:'R-410A',lastService:'2026-01-15',nextService:'2026-07-15',ownerName:'Sarah Kowalski',ownerPhone:'(512) 555-0311',ownerEmail:'s.kowalski@gmail.com',notes:'Unit in excellent condition. Owner punctual with scheduling.',photos:[],serviceHistory:[{date:'2026-01-15',action:'Annual maintenance. Full inspection, filter replacement. All systems operating normally.',tech:'Mike Torres'},{date:'2025-01-20',action:'Annual maintenance. Cleaned coils, checked refrigerant, replaced filter.',tech:'Mike Torres'}]},
+  '803':{status:'due',hvacModel:'Pioneer WYS018GMFI22RL',hvacBTU:'18,000',hvacSerial:'PI18-77412D',installDate:'2022-11-30',warrantyExpires:'2027-11-30',filterSize:'16×20×1',refrigerant:'R-32',lastService:'2025-12-05',nextService:'2026-06-05',ownerName:'Carlos Vega',ownerPhone:'(512) 555-0488',ownerEmail:'cvega@vegainv.com',notes:'Prefers afternoons after 2pm. Unit accessible via side gate — code 9134.',photos:[],serviceHistory:[{date:'2025-12-05',action:'Annual maintenance. Filter, coil cleaning, refrigerant check. Minor vibration — tightened mounting brackets.',tech:'Jason Webb'},{date:'2024-12-10',action:'Annual maintenance. All normal.',tech:'Jason Webb'}]},
+  '809':{status:'overdue',hvacModel:'Gree LIVS24HP230V1B',hvacBTU:'24,000',hvacSerial:'GR24-44102E',installDate:'2021-07-22',warrantyExpires:'2026-07-22',filterSize:'20×24×1',refrigerant:'R-410A',lastService:'2025-02-14',nextService:'2025-08-14',ownerName:"Michael O'Brien",ownerPhone:'(737) 555-0199',ownerEmail:'mobrien@email.com',notes:"OVERDUE 9 MONTHS. Owner traveling internationally. Contact window: June 2026.",photos:[],serviceHistory:[{date:'2025-02-14',action:'Annual maintenance. Filter replaced, coils cleaned, refrigerant levels good.',tech:'Mike Torres'},{date:'2024-02-20',action:'Annual maintenance. Found loose electrical connection — secured. Filter replaced.',tech:'Mike Torres'}]},
+  '901':{status:'good',hvacModel:'Mitsubishi MSZ-GL18NA',hvacBTU:'18,000',hvacSerial:'MXZ18-99211F',installDate:'2023-05-12',warrantyExpires:'2028-05-12',filterSize:'16×20×1',refrigerant:'R-410A',lastService:'2026-03-08',nextService:'2026-09-08',ownerName:'Patricia Wells',ownerPhone:'(512) 555-0512',ownerEmail:'pwells@outlook.com',notes:'System installed 2023.',photos:[],serviceHistory:[{date:'2026-03-08',action:'Semi-annual checkup. All systems normal, filter replaced.',tech:'Mike Torres'},{date:'2025-09-10',action:'Annual maintenance. Checked refrigerant, cleaned coils, new filter.',tech:'Mike Torres'},{date:'2023-05-12',action:'New system installation. Mitsubishi 18k BTU mini-split. Tested all functions — operational.',tech:'Jason Webb'}]},
+  '905':{status:'due',hvacModel:'Carrier 38MAQB24R-3',hvacBTU:'24,000',hvacSerial:'CA24-31108G',installDate:'2022-03-01',warrantyExpires:'2027-03-01',filterSize:'20×25×1',refrigerant:'R-410A',lastService:'2025-12-20',nextService:'2026-06-20',ownerName:'David Huffman',ownerPhone:'(512) 555-0628',ownerEmail:'dhuffman@gmail.com',notes:'Large vehicle collection — unit must stay cool. Owner focused on humidity control.',photos:[],serviceHistory:[{date:'2025-12-20',action:'Annual maintenance. Replaced filter, cleaned coils, added 1 lb R-410A.',tech:'Jason Webb'},{date:'2024-12-15',action:'Annual maintenance. All normal.',tech:'Jason Webb'}]},
+  '1101':{status:'good',hvacModel:'Daikin 17 Series FTXB30AXVJU',hvacBTU:'30,000',hvacSerial:'DK30-22914H',installDate:'2022-08-15',warrantyExpires:'2027-08-15',filterSize:'24×30×1',refrigerant:'R-32',lastService:'2026-04-10',nextService:'2026-10-10',ownerName:'Jennifer Okafor',ownerPhone:'(512) 555-0744',ownerEmail:'jen.okafor@corp.net',notes:'Corporate-owned unit. Contact Jennifer directly — not the on-site manager.',photos:[],serviceHistory:[{date:'2026-04-10',action:'Spring service. Filter replaced, coil cleaning, all systems nominal.',tech:'Mike Torres'},{date:'2025-10-18',action:'Annual maintenance. All normal.',tech:'Mike Torres'},{date:'2024-10-22',action:'Annual maintenance. Replaced capacitor (weak reading). Filter replaced.',tech:'Jason Webb'}]},
+  '1102':{status:'overdue',hvacModel:'Pioneer WYS030GMFI22RL',hvacBTU:'30,000',hvacSerial:'PI30-66103I',installDate:'2021-11-05',warrantyExpires:'2026-11-05',filterSize:'24×30×1',refrigerant:'R-32',lastService:'2025-03-01',nextService:'2025-09-01',ownerName:'Tom & Sandra Birch',ownerPhone:'(512) 555-0891',ownerEmail:'tbirch@birch-family.com',notes:'OVERDUE 8 MONTHS. Weekend use only. Best contact: text Tom first.',photos:[],serviceHistory:[{date:'2025-03-01',action:'Spring service. Filter replaced, minor cleaning.',tech:'Jason Webb'},{date:'2024-09-05',action:'Annual maintenance. All normal.',tech:'Mike Torres'}]},
+  '1201':{status:'good',hvacModel:'Mitsubishi MXZ-3C24NAHZ2',hvacBTU:'24,000',hvacSerial:'MXZ3-11042J',installDate:'2023-02-20',warrantyExpires:'2028-02-20',filterSize:'20×24×1',refrigerant:'R-410A',lastService:'2026-02-28',nextService:'2026-08-28',ownerName:'Alex Reyes',ownerPhone:'(737) 555-0033',ownerEmail:'a.reyes@reyesenterprise.com',notes:'Multi-zone system — check BOTH heads on every service visit.',photos:[],serviceHistory:[{date:'2026-02-28',action:'Annual maintenance. Both heads cleaned, filters replaced, all normal.',tech:'Mike Torres'},{date:'2025-03-02',action:'Annual maintenance. Second head had ice buildup — cleared drain line and monitored.',tech:'Mike Torres'},{date:'2023-02-20',action:'Multi-zone system installation. Both heads fully operational.',tech:'Jason Webb'}]},
+  '412':{status:'due',hvacModel:'Carrier 38MAQB24R-3',hvacBTU:'24,000',hvacSerial:'CA24-88231K',installDate:'2022-01-15',warrantyExpires:'2027-01-15',filterSize:'20×24×1',refrigerant:'R-410A',lastService:'2025-12-01',nextService:'2026-06-01',ownerName:'William Drake',ownerPhone:'(512) 555-0955',ownerEmail:'wdrake@drakelaw.com',notes:'Attorney — text only, no calls. Unit is near the main gate.',photos:[],serviceHistory:[{date:'2025-12-01',action:'Annual maintenance. Filter, coil cleaning. All normal.',tech:'Jason Webb'},{date:'2024-12-09',action:'Annual maintenance. Added 0.25 lbs refrigerant. All normal.',tech:'Jason Webb'}]},
+  '702':{status:'overdue',hvacModel:'MrCool DIY 24k BTU',hvacBTU:'24,000',hvacSerial:'MC24-19204L',installDate:'2020-06-01',warrantyExpires:'2025-06-01',filterSize:'20×24×1',refrigerant:'R-410A',lastService:'2025-01-10',nextService:'2025-07-10',ownerName:'Frank Castillo',ownerPhone:'(512) 555-0177',ownerEmail:'fcastillo@email.com',notes:'OVERDUE 10 MONTHS. Owner-installed system — verify wiring on next visit. Warranty expired.',photos:[],serviceHistory:[{date:'2025-01-10',action:'Annual inspection. Found minor refrigerant leak at Schrader valve — replaced and recharged.',tech:'Jason Webb'},{date:'2024-01-18',action:'Annual maintenance. All normal.',tech:'Jason Webb'}]},
+};
+
+// ════════════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════════════
+let DATA = {};
+let selectedId = null;
+let activeSearch = '';
+let activeFilter = 'all';
+let currentView = 'map';
+let activeTab = 'overview';
+
+// ════════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════════
+function init() {
+  const saved = localStorage.getItem('gota_hvac_v2');
+  if (saved) {
+    DATA = JSON.parse(saved);
+    // Ensure all units have a photos array (backward compat)
+    Object.values(DATA).forEach(u => { if (!u.photos) u.photos = []; });
+  } else {
+    buildDefaults();
+    persist();
+  }
+  renderMap();
+  updateStats();
+}
+
+function buildDefaults() {
+  LAYOUT.forEach(s => s.groups.forEach(g => g.rows.forEach(row => row.forEach(id => {
+    DATA[id] = { id, building: g.name, size: g.size, status: 'unconfigured',
+      hvacModel:'', hvacBTU:'', hvacSerial:'', installDate:'', warrantyExpires:'',
+      filterSize:'', refrigerant:'R-410A', lastService:'', nextService:'',
+      ownerName:'', ownerPhone:'', ownerEmail:'', notes:'', photos:[], serviceHistory:[] };
+  }))));
+  Object.entries(SAMPLES).forEach(([id, d]) => { if (DATA[id]) Object.assign(DATA[id], d); });
+}
+
+function persist() { localStorage.setItem('gota_hvac_v2', JSON.stringify(DATA)); }
+
+function confirmReset() {
+  if (confirm('Reset ALL data to defaults? This cannot be undone.')) {
+    localStorage.removeItem('gota_hvac_v2');
+    DATA = {};
+    selectedId = null;
+    buildDefaults();
+    persist();
+    renderMap();
+    updateStats();
+    closePanel();
+    showToast('↺', 'Data reset to defaults');
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// MAP RENDERING
+// ════════════════════════════════════════════════════════════
+function renderMap() {
+  const container = document.getElementById('siteMap');
+  container.innerHTML = '';
+  LAYOUT.forEach(stripDef => {
+    const strip = document.createElement('div');
+    strip.className = 'map-strip';
+    const stripLbl = document.createElement('div');
+    stripLbl.style.cssText = 'font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.08em;text-align:center;margin-bottom:4px';
+    stripLbl.textContent = stripDef.strip;
+    strip.appendChild(stripLbl);
+    stripDef.groups.forEach(g => {
+      const group = document.createElement('div');
+      group.className = 'bldg-group';
+      const lbl = document.createElement('div');
+      lbl.className = 'bldg-label';
+      lbl.textContent = g.name + ' · ' + g.size;
+      group.appendChild(lbl);
+      const grid = document.createElement('div');
+      grid.className = 'units-grid';
+      g.rows.forEach(row => {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'unit-row';
+        row.forEach(id => {
+          const u = DATA[id] || {};
+          const cell = document.createElement('div');
+          cell.className = 'unit-cell unit-' + (u.status || 'unconfigured');
+          cell.style.cssText = 'width:52px;height:25px';
+          cell.dataset.id = id;
+          cell.textContent = '#' + id;
+          cell.title = `Unit #${id} — ${u.ownerName || 'No owner'} | ${u.status || 'unconfigured'}`;
+          if (id === selectedId) cell.classList.add('unit-selected');
+          cell.addEventListener('click', () => openUnit(id));
+          rowEl.appendChild(cell);
+        });
+        grid.appendChild(rowEl);
+      });
+      group.appendChild(grid);
+      strip.appendChild(group);
+    });
+    container.appendChild(strip);
+  });
+  applyFilter();
+}
+
+// ════════════════════════════════════════════════════════════
+// LIST RENDERING
+// ════════════════════════════════════════════════════════════
+function renderList() {
+  const body = document.getElementById('listBody');
+  body.innerHTML = '';
+  const order = { overdue:0, due:1, good:2, unconfigured:3 };
+  const units = Object.values(DATA).filter(u => matches(u)).sort((a,b) => (order[a.status]||3)-(order[b.status]||3));
+  if (!units.length) {
+    body.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:#374151">No units match your search.</td></tr>';
+    return;
+  }
+  units.forEach(u => {
+    const tr = document.createElement('tr');
+    tr.style.cssText = 'border-top:1px solid #0f172a;cursor:pointer;transition:background .1s';
+    tr.onmouseenter = () => tr.style.background = '#0f172a';
+    tr.onmouseleave = () => tr.style.background = '';
+    tr.onclick = () => openUnit(u.id);
+    tr.innerHTML = `
+      <td style="padding:10px 14px;font-weight:700;color:#f1f5f9">#${u.id}</td>
+      <td style="padding:10px 14px;color:#94a3b8;font-size:12px">${u.building}</td>
+      <td style="padding:10px 14px">${badge(u.status)}</td>
+      <td style="padding:10px 14px;color:#cbd5e1;font-size:13px">${u.ownerName||'<span style="color:#374151">—</span>'}</td>
+      <td style="padding:10px 14px;font-size:12px;color:#64748b">${fmtDate(u.lastService)}</td>
+      <td style="padding:10px 14px;font-size:12px;color:${dateColor(u.nextService)}">${fmtDate(u.nextService)||'—'}</td>
+      <td style="padding:10px 14px;font-size:12px;color:#64748b">${u.hvacModel||'<span style="color:#374151">—</span>'}</td>`;
+    body.appendChild(tr);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// UNIT DETAIL PANEL
+// ════════════════════════════════════════════════════════════
+function openUnit(id) {
+  selectedId = id;
+  document.querySelectorAll('.unit-cell').forEach(c => c.classList.remove('unit-selected'));
+  const cell = document.querySelector(`.unit-cell[data-id="${id}"]`);
+  if (cell) cell.classList.add('unit-selected');
+  const panel = document.getElementById('detailPanel');
+  panel.style.display = 'block';
+  activeTab = 'overview';
+  drawPanel();
+  setupAutoSave();
+}
+
+function closePanel() {
+  document.getElementById('detailPanel').style.display = 'none';
+  document.querySelectorAll('.unit-cell').forEach(c => c.classList.remove('unit-selected'));
+  selectedId = null;
+}
+
+function drawPanel() {
+  const u = DATA[selectedId];
+  if (!u) return;
+  const panel = document.getElementById('detailPanel');
+  if (panel._autoSaveListener) {
+    panel.removeEventListener('blur', panel._autoSaveListener, true);
+    panel.removeEventListener('input', panel._autoSaveInputListener);
+  }
+
+  const photoCount = (u.photos || []).length;
+
+  panel.innerHTML = `
+    <!-- Sticky Header -->
+    <div style="position:sticky;top:0;background:#080f1a;border-bottom:1px solid #1e293b;z-index:10;padding:14px 16px 0">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span style="font-size:26px;font-weight:900;color:#f8fafc">#${u.id}</span>
+            ${badge(u.status)}
+            <span id="microSave" style="font-size:10px;font-weight:700;color:#34d399;opacity:0;transition:opacity .35s,transform .35s;transform:translateY(-4px);letter-spacing:.03em">✓ Saved</span>
+          </div>
+          <div style="font-size:11px;color:#475569;margin-top:2px">${u.building} · ${u.size} ft</div>
+        </div>
+        <button onclick="closePanel()" style="background:none;border:none;color:#475569;cursor:pointer;padding:4px;border-radius:6px" onmouseover="this.style.color='#f1f5f9'" onmouseout="this.style.color='#475569'">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Action row -->
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <button class="btn btn-green" style="flex:1;font-size:11px" onclick="openTextModal()">📱 Text</button>
+        <button class="btn btn-blue" style="flex:1;font-size:11px" onclick="openScheduleModal()">📅 Schedule</button>
+        <button class="btn btn-gray" style="flex:1;font-size:11px" onclick="openLogModal()">📋 Log Work</button>
+      </div>
+
+      <!-- Tabs -->
+      <div style="display:flex;border-bottom:1px solid #1e293b;overflow-x:auto">
+        <button class="tab-btn ${activeTab==='overview'?'active':''}" id="tb-overview" onclick="switchTab('overview')">Overview</button>
+        <button class="tab-btn ${activeTab==='hvac'?'active':''}" id="tb-hvac" onclick="switchTab('hvac')">HVAC System</button>
+        <button class="tab-btn ${activeTab==='owner'?'active':''}" id="tb-owner" onclick="switchTab('owner')">Owner</button>
+        <button class="tab-btn ${activeTab==='history'?'active':''}" id="tb-history" onclick="switchTab('history')">History (${u.serviceHistory?.length||0})</button>
+        <button class="tab-btn ${activeTab==='photos'?'active':''}" id="tb-photos" onclick="switchTab('photos')">📷 Photos${photoCount ? ' ('+photoCount+')' : ''}</button>
+      </div>
+    </div>
+
+    <!-- Tab content area -->
+    <div style="padding:16px">
+
+      <!-- OVERVIEW -->
+      <div class="tab-content ${activeTab==='overview'?'active':''}" id="tc-overview">
+        <div style="font-size:10px;font-weight:800;color:#334155;letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px">Status &amp; Schedule</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+          <div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:12px">
+            <div style="font-size:10px;color:#475569;margin-bottom:4px">Last Service</div>
+            <div style="font-size:13px;font-weight:700;color:${u.lastService?'#e2e8f0':'#374151'}">${fmtDate(u.lastService)||'Not recorded'}</div>
+          </div>
+          <div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:12px">
+            <div style="font-size:10px;color:#475569;margin-bottom:4px">Next Service</div>
+            <div style="font-size:13px;font-weight:700;color:${dateColor(u.nextService)}">${fmtDate(u.nextService)||'Not scheduled'}</div>
+          </div>
+        </div>
+        <div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:12px;margin-bottom:16px">
+          <div style="font-size:10px;color:#475569;margin-bottom:8px;font-weight:700">Change Status</div>
+          <div style="display:flex;gap:6px">
+            <button onclick="setStatus('good')" class="btn ${u.status==='good'?'btn-green':'btn-gray'}" style="flex:1;font-size:11px">✅ Good</button>
+            <button onclick="setStatus('due')" class="btn ${u.status==='due'?'btn-amber':'btn-gray'}" style="flex:1;font-size:11px">⚠️ Due</button>
+            <button onclick="setStatus('overdue')" class="btn ${u.status==='overdue'?'btn-red':'btn-gray'}" style="flex:1;font-size:11px">🔴 Overdue</button>
+          </div>
+        </div>
+        <div style="font-size:10px;font-weight:800;color:#334155;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px">Notes &amp; Reminders</div>
+        <textarea id="notesTA" rows="6" placeholder="Add notes, reminders, special instructions…" style="resize:vertical;font-size:13px">${escHtml(u.notes||'')}</textarea>
+        <button class="btn btn-gray" style="margin-top:8px;width:100%;font-size:12px" onclick="saveNotes()">💾 Save Notes</button>
+      </div>
+
+      <!-- HVAC SYSTEM -->
+      <div class="tab-content ${activeTab==='hvac'?'active':''}" id="tc-hvac">
+        <div style="font-size:10px;font-weight:800;color:#334155;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px">HVAC System Details</div>
+        ${hvacForm(u)}
+        <button class="btn btn-blue" style="margin-top:14px;width:100%;font-size:13px" onclick="saveHvac()">💾 Save HVAC Details</button>
+      </div>
+
+      <!-- OWNER -->
+      <div class="tab-content ${activeTab==='owner'?'active':''}" id="tc-owner">
+        <div style="font-size:10px;font-weight:800;color:#334155;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px">Owner Information</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+          <div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px">Owner Name</label>
+            <input type="text" id="ow_name" value="${escAttr(u.ownerName||'')}"></div>
+          <div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px">Phone Number</label>
+            <input type="tel" id="ow_phone" value="${escAttr(u.ownerPhone||'')}" placeholder="(512) 555-0000"></div>
+          <div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px">Email Address</label>
+            <input type="email" id="ow_email" value="${escAttr(u.ownerEmail||'')}" placeholder="email@example.com"></div>
+        </div>
+        <button class="btn btn-blue" style="width:100%;font-size:13px" onclick="saveOwner()">💾 Save Owner Info</button>
+        ${u.ownerPhone||u.ownerEmail ? `
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid #1e293b">
+          <div style="font-size:10px;font-weight:800;color:#334155;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px">Quick Contact</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${u.ownerPhone?`<a href="tel:${u.ownerPhone.replace(/\D/g,'')}" class="btn btn-gray" style="font-size:12px">📞 Call</a>`:''}
+            ${u.ownerPhone?`<button class="btn btn-green" style="font-size:12px" onclick="openTextModal()">💬 Text</button>`:''}
+            ${u.ownerEmail?`<a href="mailto:${u.ownerEmail}" class="btn btn-gray" style="font-size:12px">✉️ Email</a>`:''}
+          </div>
+        </div>` : ''}
+      </div>
+
+      <!-- HISTORY -->
+      <div class="tab-content ${activeTab==='history'?'active':''}" id="tc-history">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div style="font-size:10px;font-weight:800;color:#334155;letter-spacing:.08em;text-transform:uppercase">Service History</div>
+          <span style="font-size:11px;color:#475569">${u.serviceHistory?.length||0} records</span>
+        </div>
+        ${u.serviceHistory && u.serviceHistory.length
+          ? `<div>${[...u.serviceHistory].reverse().map(e=>`
+              <div class="hist-item">
+                <div style="font-size:11px;font-weight:700;color:#60a5fa;margin-bottom:2px">${fmtDate(e.date)}</div>
+                <div style="font-size:13px;color:#e2e8f0;margin-bottom:4px">${escHtml(e.action)}</div>
+                <div style="font-size:11px;color:#475569">🔧 ${escHtml(e.tech||'Unknown')}</div>
+              </div>`).join('')}</div>`
+          : `<div style="text-align:center;padding:32px 16px;color:#374151">
+               <div style="font-size:32px;margin-bottom:8px">🔧</div>
+               <div style="font-size:14px;font-weight:600">No service history yet</div>
+               <div style="font-size:12px;margin-top:4px">Log your first service to get started.</div>
+             </div>`}
+        <button class="btn btn-blue" style="margin-top:16px;width:100%;font-size:13px" onclick="openLogModal()">+ Add Service Entry</button>
+      </div>
+
+      <!-- PHOTOS -->
+      <div class="tab-content ${activeTab==='photos'?'active':''}" id="tc-photos">
+        ${photosTabHtml(u)}
+      </div>
+
+    </div>`;
+
+  // If photos tab is active, render the grid after DOM is ready
+  if (activeTab === 'photos') {
+    requestAnimationFrame(() => {
+      renderPhotoGrid();
+      setupDropZone();
+    });
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// PHOTOS TAB
+// ════════════════════════════════════════════════════════════
+function photosTabHtml(u) {
+  const count = (u.photos || []).length;
+  const fbWarn = firebaseReady ? '' : `
+    <div style="background:#1c0a00;border:1px solid #92400e;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:11px;color:#fbbf24;display:flex;align-items:center;gap:8px">
+      <span>⚠️</span><span>Firebase Storage unavailable. Check your connection and Firebase config.</span>
+    </div>`;
+
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:10px;font-weight:800;color:#334155;letter-spacing:.08em;text-transform:uppercase">Unit Photos</div>
+      <span style="font-size:11px;color:#475569" id="photoCountLabel">${count} photo${count!==1?'s':''}</span>
+    </div>
+
+    ${fbWarn}
+
+    <!-- Drop zone / upload trigger -->
+    <label class="photo-drop-zone" id="photoDropZone" for="photoFileInput" style="margin-bottom:12px">
+      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="#475569" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+      </svg>
+      <div style="font-size:13px;font-weight:600;color:#94a3b8;margin-top:4px">Click to upload photos</div>
+      <div style="font-size:10px;color:#475569">or drag &amp; drop here</div>
+      <div style="font-size:10px;color:#374151;margin-top:2px">JPG, PNG, HEIC, WEBP · Max 15 MB each</div>
+    </label>
+    <input type="file" id="photoFileInput" accept="image/*" multiple style="display:none" onchange="handlePhotoFiles(this.files)">
+
+    <!-- Upload progress -->
+    <div id="uploadProgressWrap" style="display:none;background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:12px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span id="uploadStatusLabel" style="font-size:12px;font-weight:600;color:#94a3b8">Uploading…</span>
+        <span id="uploadPctLabel" style="font-size:11px;color:#60a5fa;font-weight:700">0%</span>
+      </div>
+      <div style="height:5px;background:#1e293b;border-radius:3px;overflow:hidden">
+        <div id="uploadProgressBar" style="height:5px;background:linear-gradient(90deg,#1d4ed8,#0ea5e9);border-radius:3px;width:0%;transition:width .15s"></div>
+      </div>
+    </div>
+
+    <!-- Photo grid -->
+    <div id="photoGrid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px"></div>
+  `;
+}
+
+function renderPhotoGrid() {
+  const grid = document.getElementById('photoGrid');
+  if (!grid || !selectedId) return;
+  const u = DATA[selectedId];
+  const photos = u.photos || [];
+
+  // Update count label
+  const lbl = document.getElementById('photoCountLabel');
+  if (lbl) lbl.textContent = `${photos.length} photo${photos.length!==1?'s':''}`;
+
+  // Update tab button
+  const tabBtn = document.getElementById('tb-photos');
+  if (tabBtn) tabBtn.textContent = `📷 Photos${photos.length ? ' ('+photos.length+')' : ''}`;
+
+  if (!photos.length) {
+    grid.innerHTML = `
+      <div style="grid-column:1/-1;text-align:center;padding:28px 16px;color:#374151">
+        <div style="font-size:32px;margin-bottom:8px">📷</div>
+        <div style="font-size:13px;font-weight:600;color:#4b5563">No photos yet</div>
+        <div style="font-size:11px;margin-top:4px">Upload photos to document the unit condition,<br>equipment, or any issues found.</div>
+      </div>`;
+    return;
+  }
+
+  grid.innerHTML = photos.map((p, i) => `
+    <div class="photo-card">
+      <img
+        src="${escAttr(p.url)}"
+        alt="${escAttr(p.name)}"
+        loading="lazy"
+        onclick="openLightbox('${escAttr(p.url)}','${escAttr(p.name)}')"
+        onerror="this.parentElement.style.opacity='.4'"
+      >
+      <button class="photo-del-btn" onclick="deletePhoto(${i})" title="Delete photo">✕</button>
+      <div style="padding:6px 8px 8px">
+        <div style="font-size:10px;color:#475569;font-weight:600">${fmtDate(p.date)}</div>
+        <div style="font-size:10px;color:#4b5563;overflow:hidden;white-space:nowrap;text-overflow:ellipsis" title="${escAttr(p.name)}">${escHtml(p.name)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ─── Drop zone drag events ────────────────────────────────
+function setupDropZone() {
+  const zone = document.getElementById('photoDropZone');
+  if (!zone) return;
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const files = e.dataTransfer?.files;
+    if (files && files.length) handlePhotoFiles(files);
+  });
+}
+
+// ─── Upload handler ───────────────────────────────────────
+function handlePhotoFiles(fileList) {
+  if (!firebaseReady) {
+    showToast('⚠️', 'Firebase Storage not available');
+    return;
+  }
+  const files = Array.from(fileList).filter(f => {
+    if (!f.type.startsWith('image/')) { showToast('⚠️', `${f.name} is not an image`); return false; }
+    if (f.size > 15 * 1024 * 1024) { showToast('⚠️', `${f.name} exceeds 15 MB`); return false; }
+    return true;
+  });
+  if (!files.length) return;
+  uploadQueue(files, 0, selectedId);
+}
+
+function uploadQueue(files, index, unitId) {
+  if (index >= files.length) {
+    const wrap = document.getElementById('uploadProgressWrap');
+    if (wrap) wrap.style.display = 'none';
+    showToast('📷', `${files.length} photo${files.length>1?'s':''} uploaded`);
+    return;
+  }
+
+  const file = files[index];
+  const wrap = document.getElementById('uploadProgressWrap');
+  const bar  = document.getElementById('uploadProgressBar');
+  const pct  = document.getElementById('uploadPctLabel');
+  const lbl  = document.getElementById('uploadStatusLabel');
+
+  if (wrap) {
+    wrap.style.display = 'block';
+    if (lbl) lbl.textContent = `Uploading ${file.name}${files.length>1?' ('+(index+1)+' of '+files.length+')':''}`;
+    if (bar) bar.style.width = '0%';
+    if (pct) pct.textContent = '0%';
+  }
+
+  // Sanitize filename
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `units/${unitId}/photos/${Date.now()}_${safeName}`;
+  const ref = storage.ref(path);
+  const task = ref.put(file);
+
+  task.on('state_changed',
+    snapshot => {
+      const p = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+      if (bar) bar.style.width = p + '%';
+      if (pct) pct.textContent = p + '%';
+    },
+    error => {
+      console.error('Upload error:', error);
+      showToast('❌', `Upload failed: ${error.message}`);
+      uploadQueue(files, index + 1, unitId);
+    },
+    async () => {
+      try {
+        const url = await task.snapshot.ref.getDownloadURL();
+        const u = DATA[unitId];
+        if (!u.photos) u.photos = [];
+        u.photos.push({ url, name: file.name, path, date: toISO(new Date()) });
+        persist();
+        renderPhotoGrid();
+      } catch(e) {
+        console.error('getDownloadURL error:', e);
+      }
+      uploadQueue(files, index + 1, unitId);
+    }
+  );
+}
+
+// ─── Delete photo ─────────────────────────────────────────
+async function deletePhoto(index) {
+  if (!confirm('Delete this photo? This cannot be undone.')) return;
+  const u = DATA[selectedId];
+  const photo = u.photos[index];
+
+  // Try to remove from Firebase Storage
+  if (firebaseReady && photo.path) {
+    try { await storage.ref(photo.path).delete(); }
+    catch(e) { console.warn('Storage delete skipped:', e.code); }
+  }
+
+  u.photos.splice(index, 1);
+  persist();
+  renderPhotoGrid();
+  showToast('🗑', 'Photo deleted');
+}
+
+// ─── Lightbox ─────────────────────────────────────────────
+function openLightbox(url, name) {
+  document.getElementById('lightboxImg').src = url;
+  document.getElementById('lightboxCaption').textContent = name;
+  document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+  document.getElementById('lightboxImg').src = '';
+}
+
+// ════════════════════════════════════════════════════════════
+// TABS
+// ════════════════════════════════════════════════════════════
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  const btn = document.getElementById('tb-' + tab);
+  const content = document.getElementById('tc-' + tab);
+  if (btn) btn.classList.add('active');
+  if (content) content.classList.add('active');
+  if (tab === 'photos') {
+    requestAnimationFrame(() => {
+      renderPhotoGrid();
+      setupDropZone();
+    });
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// SAVE ACTIONS
+// ════════════════════════════════════════════════════════════
+function setStatus(s) {
+  DATA[selectedId].status = s;
+  persist();
+  drawPanel();
+  refreshCell(selectedId);
+  updateStats();
+  showToast('✅', `Unit #${selectedId} → ${s}`);
+}
+
+function saveNotes() {
+  const ta = document.getElementById('notesTA');
+  if (!ta) return;
+  DATA[selectedId].notes = ta.value;
+  persist();
+  showToast('💾', 'Notes saved');
+}
+
+function saveHvac() {
+  const u = DATA[selectedId];
+  ['hvacModel','hvacBTU','hvacSerial','installDate','warrantyExpires','filterSize','refrigerant','lastService','nextService'].forEach(k => {
+    const el = document.getElementById('hv_'+k);
+    if (el) u[k] = el.value;
+  });
+  autoStatus(selectedId);
+  persist();
+  refreshCell(selectedId);
+  drawPanel();
+  switchTab('hvac');
+  updateStats();
+  showToast('💾', 'HVAC details saved');
+}
+
+function saveOwner() {
+  const u = DATA[selectedId];
+  ['name','phone','email'].forEach(k => {
+    const el = document.getElementById('ow_'+k);
+    if (el) u['owner'+k.charAt(0).toUpperCase()+k.slice(1)] = el.value;
+  });
+  persist();
+  drawPanel();
+  switchTab('owner');
+  showToast('💾', 'Owner info saved');
+}
+
+function hvacForm(u) {
+  const fields = [
+    ['hvacModel','Model','text','e.g. Mitsubishi MSZ-GL24NA'],
+    ['hvacBTU','BTU Capacity','text','e.g. 24,000'],
+    ['hvacSerial','Serial Number','text','Serial #'],
+    ['installDate','Install Date','date',''],
+    ['warrantyExpires','Warranty Expires','date',''],
+    ['filterSize','Filter Size','text','e.g. 16×20×1'],
+    ['refrigerant','Refrigerant Type','text','e.g. R-410A'],
+    ['lastService','Last Service Date','date',''],
+    ['nextService','Next Service Date','date',''],
+  ];
+  return `<div style="display:flex;flex-direction:column;gap:10px">${fields.map(([k,lbl,type,ph])=>`
+    <div><label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px">${lbl}</label>
+    <input type="${type}" id="hv_${k}" value="${escAttr(u[k]||'')}" placeholder="${ph}"></div>`).join('')}</div>`;
+}
+
+function autoStatus(id) {
+  const u = DATA[id];
+  if (!u.nextService) return;
+  const diff = (new Date(u.nextService) - new Date()) / 86400000;
+  if (diff < 0) u.status = 'overdue';
+  else if (diff <= 30) u.status = 'due';
+  else u.status = 'good';
+}
+
+function refreshCell(id) {
+  const u = DATA[id];
+  document.querySelectorAll(`.unit-cell[data-id="${id}"]`).forEach(c => {
+    c.className = 'unit-cell unit-' + u.status + (id === selectedId ? ' unit-selected' : '');
+    c.style.cssText = 'width:52px;height:25px';
+    c.title = `Unit #${id} — ${u.ownerName||'No owner'} | ${u.status}`;
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// MODALS
+// ════════════════════════════════════════════════════════════
+function openLogModal() {
+  document.getElementById('logUnitLabel').textContent = '#' + selectedId;
+  document.getElementById('logDate').value = toISO(new Date());
+  document.getElementById('logTech').value = '';
+  document.getElementById('logAction').value = '';
+  document.getElementById('logStatus').value = 'good';
+  document.getElementById('logNext').value = '';
+  document.getElementById('logModal').style.display = 'flex';
+}
+
+function submitLog() {
+  const date   = document.getElementById('logDate').value;
+  const tech   = document.getElementById('logTech').value;
+  const action = document.getElementById('logAction').value.trim();
+  const status = document.getElementById('logStatus').value;
+  const next   = document.getElementById('logNext').value;
+  if (!date || !action) { showToast('⚠️', 'Date and description are required'); return; }
+  const u = DATA[selectedId];
+  if (!u.serviceHistory) u.serviceHistory = [];
+  u.serviceHistory.push({ date, action, tech: tech || 'Avant Dev Group' });
+  u.lastService = date;
+  if (next) u.nextService = next;
+  u.status = status;
+  persist();
+  closeModal('logModal');
+  drawPanel();
+  switchTab('history');
+  refreshCell(selectedId);
+  updateStats();
+  showToast('✅', 'Service entry logged');
+}
+
+function openScheduleModal() {
+  const u = DATA[selectedId];
+  document.getElementById('schedUnitLabel').textContent = '#' + selectedId;
+  document.getElementById('schedDate').value = u.nextService || '';
+  document.getElementById('schedTech').value = '';
+  document.getElementById('schedNotes').value = '';
+  document.getElementById('scheduleModal').style.display = 'flex';
+}
+
+function submitSchedule() {
+  const date = document.getElementById('schedDate').value;
+  const type = document.getElementById('schedType').value;
+  if (!date) { showToast('⚠️', 'Please select a date'); return; }
+  const u = DATA[selectedId];
+  u.nextService = date;
+  autoStatus(selectedId);
+  persist();
+  closeModal('scheduleModal');
+  drawPanel();
+  switchTab('overview');
+  refreshCell(selectedId);
+  updateStats();
+  showToast('📅', `${type} scheduled: ${fmtDate(date)}`);
+}
+
+function openTextModal() {
+  const u = DATA[selectedId];
+  document.getElementById('textTo').value = u.ownerName
+    ? `${u.ownerName}  ·  ${u.ownerPhone || 'No phone on file'}`
+    : 'No owner info on file';
+  document.getElementById('textMsg').value = '';
+  document.getElementById('charCount').textContent = '0';
+  document.getElementById('textModal').style.display = 'flex';
+}
+
+function applyTemplate(type) {
+  const u = DATA[selectedId];
+  const first = u.ownerName ? u.ownerName.split(' ')[0] : 'there';
+  const msgs = {
+    maintenance: `Hi ${first}, this is Avant Development Group. It's time for your HVAC system at GOTA Unit #${selectedId} to be serviced. Please reply to schedule. Thank you!`,
+    appointment: `Hi ${first}, this is a reminder from Avant Development Group that your HVAC service at GOTA Unit #${selectedId} is coming up soon. Please confirm or reschedule. Thanks!`,
+    overdue: `Hi ${first}, Avant Development Group here. Your HVAC maintenance at GOTA Unit #${selectedId} is past due. Please contact us ASAP to schedule service. Call/text (512) XXX-XXXX.`,
+  };
+  const ta = document.getElementById('textMsg');
+  ta.value = msgs[type] || '';
+  document.getElementById('charCount').textContent = ta.value.length;
+}
+
+function sendText() {
+  const msg = document.getElementById('textMsg').value.trim();
+  if (!msg) { showToast('⚠️', 'Please write a message first'); return; }
+  closeModal('textModal');
+  showToast('📱', 'Message ready — integrate Twilio to send!');
+}
+
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+document.addEventListener('input', e => {
+  if (e.target.id === 'textMsg') {
+    document.getElementById('charCount').textContent = e.target.value.length;
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// SEARCH / FILTER
+// ════════════════════════════════════════════════════════════
+function handleSearch(v) { activeSearch = v.toLowerCase(); applyFilter(); if (currentView==='list') renderList(); }
+function handleFilter(v) { activeFilter = v; applyFilter(); if (currentView==='list') renderList(); }
+
+function matches(u) {
+  if (activeFilter !== 'all' && u.status !== activeFilter) return false;
+  if (activeSearch) {
+    const hay = [u.id, u.building, u.ownerName, u.ownerEmail, u.hvacModel, u.hvacSerial].join(' ').toLowerCase();
+    if (!hay.includes(activeSearch)) return false;
+  }
+  return true;
+}
+
+function applyFilter() {
+  document.querySelectorAll('.unit-cell').forEach(c => {
+    const u = DATA[c.dataset.id];
+    c.classList.toggle('unit-dimmed', !matches(u||{}));
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// STATS
+// ════════════════════════════════════════════════════════════
+function updateStats() {
+  const all = Object.values(DATA);
+  const now = new Date();
+  document.getElementById('statTotal').textContent = all.length;
+  document.getElementById('statGood').textContent = all.filter(u=>u.status==='good').length;
+  document.getElementById('statDue').textContent = all.filter(u=>u.status==='due').length;
+  document.getElementById('statOverdue').textContent = all.filter(u=>u.status==='overdue').length;
+  document.getElementById('statUnconfig').textContent = all.filter(u=>u.status==='unconfigured').length;
+  document.getElementById('statUpcoming').textContent = all.filter(u => {
+    if (!u.nextService) return false;
+    const d = (new Date(u.nextService) - now) / 86400000;
+    return d >= 0 && d <= 30;
+  }).length;
+}
+
+// ════════════════════════════════════════════════════════════
+// VIEW TOGGLE
+// ════════════════════════════════════════════════════════════
+function setView(v) {
+  currentView = v;
+  const isMap = v === 'map';
+  document.getElementById('mapView').style.display = isMap ? 'block' : 'none';
+  document.getElementById('listView').style.display = isMap ? 'none' : 'block';
+  document.getElementById('btnMap').className = 'btn ' + (isMap ? 'btn-blue' : 'btn-gray');
+  document.getElementById('btnList').className = 'btn ' + (!isMap ? 'btn-blue' : 'btn-gray');
+  document.getElementById('btnMap').style.cssText = 'font-size:11px;padding:5px 12px';
+  document.getElementById('btnList').style.cssText = 'font-size:11px;padding:5px 12px';
+  if (!isMap) renderList();
+}
+
+// ════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════
+function badge(s) {
+  const map = {
+    good:         ['#064e3b','#10b981','#6ee7b7','✅ Good'],
+    due:          ['#78350f','#f59e0b','#fde68a','⚠️ Due Soon'],
+    overdue:      ['#7f1d1d','#ef4444','#fca5a5','🔴 Overdue'],
+    unconfigured: ['#111827','#374151','#6b7280','⬜ Unconfigured'],
+  };
+  const [bg,bc,tc,lbl] = map[s]||map.unconfigured;
+  return `<span style="background:${bg};border:1px solid ${bc};color:${tc};border-radius:20px;padding:2px 9px;font-size:10px;font-weight:700;white-space:nowrap">${lbl}</span>`;
+}
+
+function fmtDate(d) {
+  if (!d) return '';
+  try { return new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+  catch(e){ return d; }
+}
+
+// Returns CSS color string (fixed from original — was returning a style attribute)
+function dateColor(d) {
+  if (!d) return '#374151';
+  const diff = (new Date(d) - new Date()) / 86400000;
+  if (diff < 0) return '#f87171';
+  if (diff <= 30) return '#fbbf24';
+  return '#94a3b8';
+}
+
+function toISO(d) { return d.toISOString().split('T')[0]; }
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s) { return String(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+// ════════════════════════════════════════════════════════════
+// TOAST
+// ════════════════════════════════════════════════════════════
+let toastTimer;
+function showToast(icon, msg) {
+  const t = document.getElementById('toast');
+  t.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ════════════════════════════════════════════════════════════
+// AUTO-SAVE
+// ════════════════════════════════════════════════════════════
+let autoSaveTimer;
+
+function autoSaveField(el) {
+  if (!selectedId || !el) return;
+  const id = el.id;
+  const u = DATA[selectedId];
+  if (id === 'notesTA') {
+    u.notes = el.value; persist(); showMicroSave();
+  } else if (id.startsWith('hv_')) {
+    const key = id.slice(3);
+    u[key] = el.value; autoStatus(selectedId); refreshCell(selectedId); updateStats(); persist(); showMicroSave();
+  } else if (id === 'ow_name')  { u.ownerName  = el.value; persist(); showMicroSave(); }
+    else if (id === 'ow_phone') { u.ownerPhone = el.value; persist(); showMicroSave(); }
+    else if (id === 'ow_email') { u.ownerEmail = el.value; persist(); showMicroSave(); }
+}
+
+function setupAutoSave() {
+  const panel = document.getElementById('detailPanel');
+  if (!panel) return;
+  panel._autoSaveListener = e => {
+    if (e.target.matches('input,textarea') && e.target.id !== 'photoFileInput') autoSaveField(e.target);
+  };
+  panel._autoSaveInputListener = e => {
+    if (e.target.matches('input,textarea') && e.target.id !== 'photoFileInput') {
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = setTimeout(() => autoSaveField(e.target), 1000);
+    }
+  };
+  panel.addEventListener('blur',  panel._autoSaveListener, true);
+  panel.addEventListener('input', panel._autoSaveInputListener);
+}
+
+function showMicroSave() {
+  const el = document.getElementById('microSave');
+  if (!el) return;
+  el.style.opacity = '1';
+  el.style.transform = 'translateY(0)';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(-4px)';
+  }, 1800);
+}
+
+// ════════════════════════════════════════════════════════════
+// KEYBOARD
+// ════════════════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (document.getElementById('lightbox').classList.contains('open')) { closeLightbox(); return; }
+    const modals = ['logModal','scheduleModal','textModal'];
+    const open = modals.find(id => document.getElementById(id).style.display !== 'none');
+    if (open) closeModal(open);
+    else if (selectedId) closePanel();
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// BOOT
+// ════════════════════════════════════════════════════════════
+init();
+</script>
+</body></html>
