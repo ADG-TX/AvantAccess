@@ -405,6 +405,16 @@ const LAYOUT = [
 ];
 
 // ════════════════════════════════════════════════════════════
+// MERGED GARAGE GROUPS (shared open spaces)
+// ════════════════════════════════════════════════════════════
+const MERGED_GROUPS = [
+  { ids: ['414','412','410'], note: '3 doors · open interior' },
+  { ids: ['812','813'],       note: 'back wall removed'        }
+];
+const UNIT_TO_MERGE = {};
+MERGED_GROUPS.forEach(g => g.ids.forEach((id, i) => UNIT_TO_MERGE[id] = { group: g, index: i }));
+
+// ════════════════════════════════════════════════════════════
 // SAMPLE DATA (13 pre-populated units)
 // ════════════════════════════════════════════════════════════
 const SAMPLES = {
@@ -449,6 +459,15 @@ async function init() {
           const d = doc.data();
           if (!d.photos) d.photos = [];
           if (!d.serviceHistory) d.serviceHistory = [];
+          if (!d.condenser) d.condenser = { model:'', serial:'', installDate:'', warrantyExpires:'', refrigerant:'' };
+          if (!d.headUnits) d.headUnits = [];
+          if (d.hasContractor === undefined) d.hasContractor = false;
+          if (!d.contractorName) d.contractorName = '';
+          if (!d.contractorCompany) d.contractorCompany = '';
+          if (!d.contractorPhone) d.contractorPhone = '';
+          if (!d.contractorEmail) d.contractorEmail = '';
+          if (!d.contractorLicense) d.contractorLicense = '';
+          if (!d.contractorNotes) d.contractorNotes = '';
           DATA[doc.id] = d;
         });
         localStorage.setItem('gota_hvac_v2', JSON.stringify(DATA));
@@ -476,11 +495,25 @@ async function init() {
 }
 
 function buildDefaults() {
+  const GREE_BLDGS = new Set(['B4','B5','B6','B8','B9']);
   LAYOUT.forEach(s => s.groups.forEach(g => g.rows.forEach(row => row.forEach(id => {
-    DATA[id] = { id, building: g.name, size: g.size, status: 'unconfigured',
+    const isGree = GREE_BLDGS.has(g.id);
+    DATA[id] = {
+      id, building: g.name, size: g.size, status: 'unconfigured',
       hvacModel:'', hvacBTU:'', hvacSerial:'', installDate:'', warrantyExpires:'',
       filterSize:'', refrigerant:'R-410A', lastService:'', nextService:'',
-      ownerName:'', ownerPhone:'', ownerEmail:'', notes:'', photos:[], serviceHistory:[] };
+      condenser: isGree
+        ? { model:'GMV-60W/L/C-T(U)', serial:'', installDate:'', warrantyExpires:'', refrigerant:'R-410A' }
+        : { model:'', serial:'', installDate:'', warrantyExpires:'', refrigerant:'' },
+      headUnits: isGree
+        ? [ { model:'GMV-ND24G/B4B-T(U)', btu:'24,000', serial:'', filterSize:'' },
+            { model:'GMV-ND24G/B4B-T(U)', btu:'24,000', serial:'', filterSize:'' } ]
+        : [],
+      hasContractor: false,
+      contractorName:'', contractorCompany:'', contractorPhone:'',
+      contractorEmail:'', contractorLicense:'', contractorNotes:'',
+      ownerName:'', ownerPhone:'', ownerEmail:'', notes:'', photos:[], serviceHistory:[]
+    };
   }))));
   Object.entries(SAMPLES).forEach(([id, d]) => { if (DATA[id]) Object.assign(DATA[id], d); });
 }
@@ -527,6 +560,8 @@ function confirmReset() {
 function renderMap() {
   const container = document.getElementById('siteMap');
   container.innerHTML = '';
+  const rendered = new Set();
+
   LAYOUT.forEach(stripDef => {
     const strip = document.createElement('div');
     strip.className = 'map-strip';
@@ -534,6 +569,7 @@ function renderMap() {
     stripLbl.style.cssText = 'font-size:9px;font-weight:800;color:#4D5C3D;text-transform:uppercase;letter-spacing:.08em;text-align:center;margin-bottom:4px';
     stripLbl.textContent = stripDef.strip;
     strip.appendChild(stripLbl);
+
     stripDef.groups.forEach(g => {
       const group = document.createElement('div');
       group.className = 'bldg-group';
@@ -543,10 +579,70 @@ function renderMap() {
       group.appendChild(lbl);
       const grid = document.createElement('div');
       grid.className = 'units-grid';
+
       g.rows.forEach(row => {
+        // Skip rows that were already absorbed into a vertical merged block
+        if (row.length === 1 && rendered.has(row[0])) return;
+
+        // Check: is this a horizontal merge row? (all cells in same merge group)
+        const mg0 = row.length > 1 ? UNIT_TO_MERGE[row[0]] : null;
+        const isHorizMerge = mg0 && row.length > 1 && row.every(id => UNIT_TO_MERGE[id] && UNIT_TO_MERGE[id].group === mg0.group);
+
+        if (isHorizMerge) {
+          const mg = mg0.group;
+          mg.ids.forEach(id => rendered.add(id));
+          const rowEl = document.createElement('div');
+          rowEl.className = 'unit-row';
+          const worst = getWorstStatus(mg.ids);
+          const mergedCell = document.createElement('div');
+          mergedCell.className = 'unit-cell unit-' + worst;
+          const w = 52 * row.length + (row.length - 1) * 3;
+          mergedCell.style.cssText = `width:${w}px;height:28px;border-width:2px;border-color:#C4A26A;background:rgba(196,162,106,.12);flex-direction:column;gap:1px`;
+          mergedCell.innerHTML = `<span style="font-size:9px;font-weight:800;letter-spacing:.03em">${mg.ids.map(id=>'#'+id).join('·')}</span><span style="font-size:7px;opacity:.7">${mg.note}</span>`;
+          mergedCell.title = `Merged: ${mg.ids.join(' + ')} — ${mg.note}`;
+          if (mg.ids.includes(selectedId)) mergedCell.classList.add('unit-selected');
+          mergedCell.addEventListener('click', () => openMergedChoice(mg.ids));
+          rowEl.appendChild(mergedCell);
+          grid.appendChild(rowEl);
+          return;
+        }
+
+        // Check: is this a single-column row that starts a vertical merge?
+        const vm0 = row.length === 1 ? UNIT_TO_MERGE[row[0]] : null;
+        if (vm0 && vm0.index === 0 && !rendered.has(row[0])) {
+          const mg = vm0.group;
+          mg.ids.forEach(id => rendered.add(id));
+          const wrapper = document.createElement('div');
+          wrapper.style.cssText = 'border:2px solid #C4A26A;border-radius:6px;padding:3px;background:rgba(196,162,106,.06);margin-bottom:1px';
+          const noteEl = document.createElement('div');
+          noteEl.style.cssText = 'font-size:7px;color:#C4A26A;text-align:center;font-weight:800;letter-spacing:.04em;margin-bottom:2px';
+          noteEl.textContent = mg.note;
+          wrapper.appendChild(noteEl);
+          mg.ids.forEach(id => {
+            const rowEl = document.createElement('div');
+            rowEl.className = 'unit-row';
+            rowEl.style.marginBottom = '2px';
+            const u = DATA[id] || {};
+            const cell = document.createElement('div');
+            cell.className = 'unit-cell unit-' + (u.status || 'unconfigured');
+            cell.style.cssText = 'width:52px;height:25px';
+            cell.dataset.id = id;
+            cell.textContent = '#' + id;
+            cell.title = `Unit #${id} — ${u.ownerName || 'No owner'} | ${u.status || 'unconfigured'}`;
+            if (id === selectedId) cell.classList.add('unit-selected');
+            cell.addEventListener('click', () => openUnit(id));
+            rowEl.appendChild(cell);
+            wrapper.appendChild(rowEl);
+          });
+          grid.appendChild(wrapper);
+          return;
+        }
+
+        // Normal row
         const rowEl = document.createElement('div');
         rowEl.className = 'unit-row';
         row.forEach(id => {
+          rendered.add(id);
           const u = DATA[id] || {};
           const cell = document.createElement('div');
           cell.className = 'unit-cell unit-' + (u.status || 'unconfigured');
@@ -560,12 +656,26 @@ function renderMap() {
         });
         grid.appendChild(rowEl);
       });
+
       group.appendChild(grid);
       strip.appendChild(group);
     });
     container.appendChild(strip);
   });
   applyFilter();
+}
+
+function getWorstStatus(ids) {
+  const order = { overdue:0, due:1, good:2, unconfigured:3 };
+  return ids.reduce((w, id) => {
+    const s = (DATA[id]||{}).status || 'unconfigured';
+    return order[s] < order[w] ? s : w;
+  }, 'unconfigured');
+}
+
+function openMergedChoice(ids) {
+  // Simple: open first unit; a future improvement could show a picker
+  openUnit(ids[0]);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -661,6 +771,7 @@ function drawPanel() {
         <button class="tab-btn ${activeTab==='owner'?'active':''}" id="tb-owner" onclick="switchTab('owner')">Owner</button>
         <button class="tab-btn ${activeTab==='history'?'active':''}" id="tb-history" onclick="switchTab('history')">History (${u.serviceHistory?.length||0})</button>
         <button class="tab-btn ${activeTab==='photos'?'active':''}" id="tb-photos" onclick="switchTab('photos')">📷 Photos${photoCount ? ' ('+photoCount+')' : ''}</button>
+        <button class="tab-btn ${activeTab==='contractor'?'active':''}" id="tb-contractor" onclick="switchTab('contractor')">🏗 Contractor</button>
       </div>
     </div>
 
@@ -749,6 +860,11 @@ function drawPanel() {
         ${photosTabHtml(u)}
       </div>
 
+      <!-- CONTRACTOR -->
+      <div class="tab-content ${activeTab==='contractor'?'active':''}" id="tc-contractor">
+        ${contractorTabHtml(u)}
+      </div>
+
     </div>`;
 
   // If photos tab is active, render the grid after DOM is ready
@@ -804,6 +920,63 @@ function photosTabHtml(u) {
     <!-- Photo grid -->
     <div id="photoGrid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px"></div>
   `;
+}
+
+function contractorTabHtml(u) {
+  const has = !!u.hasContractor;
+  return `
+    <div style="font-size:10px;font-weight:800;color:#4D5C3D;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px">General Contractor</div>
+    <div style="background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:12px;margin-bottom:16px">
+      <div style="font-size:13px;font-weight:600;color:#DDD5B8;margin-bottom:10px">Does this owner have a General Contractor?</div>
+      <div style="display:flex;gap:20px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#F5EDD8">
+          <input type="radio" name="hasGC_${u.id}" value="yes" ${has?'checked':''} onchange="toggleContractor(true)" style="width:auto;accent-color:#C4A26A"> Yes
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#F5EDD8">
+          <input type="radio" name="hasGC_${u.id}" value="no" ${!has?'checked':''} onchange="toggleContractor(false)" style="width:auto;accent-color:#C4A26A"> No
+        </label>
+      </div>
+    </div>
+
+    <div id="contractorFields" style="display:${has?'flex':'none'};flex-direction:column;gap:10px;margin-bottom:16px">
+      <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Contractor Name</label>
+        <input id="gc_name" value="${escAttr(u.contractorName||'')}" placeholder="Full name"></div>
+      <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Company</label>
+        <input id="gc_company" value="${escAttr(u.contractorCompany||'')}" placeholder="Company name"></div>
+      <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Phone</label>
+        <input type="tel" id="gc_phone" value="${escAttr(u.contractorPhone||'')}" placeholder="(512) 555-0000"></div>
+      <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Email</label>
+        <input type="email" id="gc_email" value="${escAttr(u.contractorEmail||'')}" placeholder="contractor@email.com"></div>
+      <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">License #</label>
+        <input id="gc_license" value="${escAttr(u.contractorLicense||'')}" placeholder="TX License #"></div>
+      <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Notes</label>
+        <textarea id="gc_notes" rows="3" placeholder="Notes about this contractor…" style="resize:vertical">${escHtml(u.contractorNotes||'')}</textarea></div>
+    </div>
+
+    <button class="btn btn-blue" style="width:100%;font-size:13px" onclick="saveContractor()">💾 Save Contractor Info</button>`;
+}
+
+function toggleContractor(val) {
+  const fields = document.getElementById('contractorFields');
+  if (fields) fields.style.display = val ? 'flex' : 'none';
+  if (DATA[selectedId]) DATA[selectedId].hasContractor = val;
+}
+
+function saveContractor() {
+  const u = DATA[selectedId];
+  if (!u) return;
+  const checked = document.querySelector(`input[name="hasGC_${selectedId}"]:checked`);
+  u.hasContractor = checked?.value === 'yes';
+  ['name','company','phone','email','license'].forEach(k => {
+    const el = document.getElementById('gc_'+k);
+    if (el) u['contractor' + k.charAt(0).toUpperCase() + k.slice(1)] = el.value;
+  });
+  const notesEl = document.getElementById('gc_notes');
+  if (notesEl) u.contractorNotes = notesEl.value;
+  persist();
+  drawPanel();
+  switchTab('contractor');
+  showToast('💾', 'Contractor info saved');
 }
 
 function renderPhotoGrid() {
@@ -1001,10 +1174,39 @@ function saveNotes() {
 
 function saveHvac() {
   const u = DATA[selectedId];
-  ['hvacModel','hvacBTU','hvacSerial','installDate','warrantyExpires','filterSize','refrigerant','lastService','nextService'].forEach(k => {
-    const el = document.getElementById('hv_'+k);
-    if (el) u[k] = el.value;
-  });
+  // Condenser
+  u.condenser = {
+    model:           document.getElementById('hv_cond_model')?.value         || '',
+    serial:          document.getElementById('hv_cond_serial')?.value        || '',
+    installDate:     document.getElementById('hv_cond_installDate')?.value   || '',
+    warrantyExpires: document.getElementById('hv_cond_warrantyExpires')?.value || '',
+    refrigerant:     document.getElementById('hv_cond_refrigerant')?.value   || ''
+  };
+  // Head units (iterate until no element found)
+  const heads = [];
+  for (let i = 0; ; i++) {
+    const modelEl = document.getElementById(`hu_${i}_model`);
+    if (!modelEl) break;
+    const sel = modelEl.value;
+    const model = sel === 'custom'
+      ? (document.getElementById(`hu_${i}_customModel`)?.value || '')
+      : sel;
+    heads.push({
+      model,
+      btu:        document.getElementById(`hu_${i}_btu`)?.value        || '',
+      serial:     document.getElementById(`hu_${i}_serial`)?.value     || '',
+      filterSize: document.getElementById(`hu_${i}_filterSize`)?.value || ''
+    });
+  }
+  u.headUnits = heads;
+  // Service dates
+  const lv = document.getElementById('hv_lastService');
+  const nv = document.getElementById('hv_nextService');
+  if (lv) u.lastService = lv.value;
+  if (nv) u.nextService = nv.value;
+  // Sync legacy fields
+  if (u.condenser.model) u.hvacModel = u.condenser.model;
+  if (heads.length) { u.hvacBTU = heads[0].btu; u.hvacSerial = heads[0].serial; }
   autoStatus(selectedId);
   persist();
   refreshCell(selectedId);
@@ -1026,21 +1228,133 @@ function saveOwner() {
   showToast('💾', 'Owner info saved');
 }
 
+function captureHvacFormIntoData() {
+  const u = DATA[selectedId];
+  if (!u) return;
+  const cond = {};
+  ['model','serial','installDate','warrantyExpires','refrigerant'].forEach(k => {
+    const el = document.getElementById('hv_cond_'+k);
+    if (el) cond[k] = el.value;
+  });
+  u.condenser = cond;
+  const heads = [];
+  for (let i = 0; ; i++) {
+    const modelEl = document.getElementById(`hu_${i}_model`);
+    if (!modelEl) break;
+    const sel = modelEl.value;
+    heads.push({
+      model: sel === 'custom' ? (document.getElementById(`hu_${i}_customModel`)?.value || '') : sel,
+      btu:        document.getElementById(`hu_${i}_btu`)?.value        || '',
+      serial:     document.getElementById(`hu_${i}_serial`)?.value     || '',
+      filterSize: document.getElementById(`hu_${i}_filterSize`)?.value || ''
+    });
+  }
+  u.headUnits = heads;
+  const lv = document.getElementById('hv_lastService');
+  const nv = document.getElementById('hv_nextService');
+  if (lv) u.lastService = lv.value;
+  if (nv) u.nextService = nv.value;
+}
+
+function addHeadUnit() {
+  captureHvacFormIntoData();
+  const u = DATA[selectedId];
+  if (!u.headUnits) u.headUnits = [];
+  u.headUnits.push({ model:'GMV-ND24G/B4B-T(U)', btu:'24,000', serial:'', filterSize:'' });
+  drawPanel(); switchTab('hvac');
+}
+
+function removeHeadUnit(idx) {
+  captureHvacFormIntoData();
+  const u = DATA[selectedId];
+  if (u.headUnits && u.headUnits.length > idx) {
+    u.headUnits.splice(idx, 1);
+    drawPanel(); switchTab('hvac');
+  }
+}
+
+function updateHeadModel(i, val) {
+  const btuEl = document.getElementById(`hu_${i}_btu`);
+  if (!btuEl) return;
+  if (val === 'GMV-ND24G/B4B-T(U)') { btuEl.value = '24,000'; btuEl.readOnly = true; }
+  else if (val === 'GMV-ND18G/B4B-T(U)') { btuEl.value = '18,000'; btuEl.readOnly = true; }
+  else { btuEl.value = ''; btuEl.readOnly = false; }
+  // Show/hide custom model field by re-rendering (simpler than DOM surgery)
+  captureHvacFormIntoData();
+  drawPanel(); switchTab('hvac');
+}
+
 function hvacForm(u) {
-  const fields = [
-    ['hvacModel','Model','text','e.g. Mitsubishi MSZ-GL24NA'],
-    ['hvacBTU','BTU Capacity','text','e.g. 24,000'],
-    ['hvacSerial','Serial Number','text','Serial #'],
-    ['installDate','Install Date','date',''],
-    ['warrantyExpires','Warranty Expires','date',''],
-    ['filterSize','Filter Size','text','e.g. 16×20×1'],
-    ['refrigerant','Refrigerant Type','text','e.g. R-410A'],
-    ['lastService','Last Service Date','date',''],
-    ['nextService','Next Service Date','date',''],
-  ];
-  return `<div style="display:flex;flex-direction:column;gap:10px">${fields.map(([k,lbl,type,ph])=>`
-    <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">${lbl}</label>
-    <input type="${type}" id="hv_${k}" value="${escAttr(u[k]||'')}" placeholder="${ph}"></div>`).join('')}</div>`;
+  const cond = u.condenser || { model:'', serial:'', installDate:'', warrantyExpires:'', refrigerant:'' };
+  const heads = u.headUnits || [];
+  return `
+    <!-- CONDENSER -->
+    <div style="font-size:10px;font-weight:800;color:#4D5C3D;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px">Condenser Unit</div>
+    <div style="background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:12px;margin-bottom:16px">
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Model</label>
+          <input id="hv_cond_model" value="${escAttr(cond.model||'')}" placeholder="GMV-60W/L/C-T(U)"></div>
+        <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Serial Number</label>
+          <input id="hv_cond_serial" value="${escAttr(cond.serial||'')}" placeholder="Serial #"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Install Date</label>
+            <input type="date" id="hv_cond_installDate" value="${escAttr(cond.installDate||'')}"></div>
+          <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Warranty Expires</label>
+            <input type="date" id="hv_cond_warrantyExpires" value="${escAttr(cond.warrantyExpires||'')}"></div>
+        </div>
+        <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Refrigerant</label>
+          <input id="hv_cond_refrigerant" value="${escAttr(cond.refrigerant||'R-410A')}" placeholder="R-410A"></div>
+      </div>
+    </div>
+
+    <!-- HEAD UNITS -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:10px;font-weight:800;color:#4D5C3D;letter-spacing:.08em;text-transform:uppercase">Head Units (${heads.length})</div>
+      <button class="btn btn-green" style="font-size:10px;padding:4px 10px" onclick="addHeadUnit()">+ Add Unit</button>
+    </div>
+    <div id="headUnitsList">
+      ${heads.length === 0 ? `<div style="text-align:center;padding:16px;color:#4D5C3D;font-size:12px">No head units added yet. Click "+ Add Unit" to add one.</div>` : heads.map((h,i) => headUnitRow(h,i)).join('')}
+    </div>
+
+    <!-- SERVICE DATES -->
+    <div style="font-size:10px;font-weight:800;color:#4D5C3D;letter-spacing:.08em;text-transform:uppercase;margin-top:16px;margin-bottom:8px">Service Schedule</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Last Service</label>
+        <input type="date" id="hv_lastService" value="${escAttr(u.lastService||'')}"></div>
+      <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Next Service</label>
+        <input type="date" id="hv_nextService" value="${escAttr(u.nextService||'')}"></div>
+    </div>`;
+}
+
+function headUnitRow(h, i) {
+  const isKnown = h.model === 'GMV-ND24G/B4B-T(U)' || h.model === 'GMV-ND18G/B4B-T(U)';
+  const selModel = isKnown ? h.model : 'custom';
+  return `
+    <div style="background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:12px;margin-bottom:8px" id="hu_row_${i}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:11px;font-weight:800;color:#C4A26A">Head Unit ${i+1}</span>
+        ${i >= 2 ? `<button onclick="removeHeadUnit(${i})" style="font-size:10px;color:#F5A5A0;background:none;border:none;cursor:pointer;font-weight:800;padding:0">✕ Remove</button>` : ''}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Model</label>
+          <select id="hu_${i}_model" onchange="updateHeadModel(${i},this.value)" style="width:100%">
+            <option value="GMV-ND24G/B4B-T(U)" ${selModel==='GMV-ND24G/B4B-T(U)'?'selected':''}>24K BTU — GMV-ND24G/B4B-T(U)</option>
+            <option value="GMV-ND18G/B4B-T(U)" ${selModel==='GMV-ND18G/B4B-T(U)'?'selected':''}>18K BTU — GMV-ND18G/B4B-T(U)</option>
+            <option value="custom" ${selModel==='custom'?'selected':''}>Other / Custom model</option>
+          </select>
+        </div>
+        ${selModel === 'custom' ? `<div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Custom Model Number</label>
+          <input id="hu_${i}_customModel" value="${escAttr(h.model||'')}" placeholder="Enter model #"></div>` : ''}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">BTU</label>
+            <input id="hu_${i}_btu" value="${escAttr(h.btu||'')}" placeholder="e.g. 24,000" ${isKnown?'readonly':''}></div>
+          <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Filter Size</label>
+            <input id="hu_${i}_filterSize" value="${escAttr(h.filterSize||'')}" placeholder="e.g. 16×20×1"></div>
+        </div>
+        <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Serial Number</label>
+          <input id="hu_${i}_serial" value="${escAttr(h.serial||'')}" placeholder="Serial #"></div>
+      </div>
+    </div>`;
 }
 
 function autoStatus(id) {
