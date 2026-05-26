@@ -750,6 +750,20 @@ function drawPanel() {
   const photoCount = (u.photos || []).length;
 
   panel.innerHTML = `
+    <!-- Hero Photo -->
+    ${u.mainPhotoUrl
+      ? `<div style="width:100%;height:190px;overflow:hidden;position:relative;flex-shrink:0;cursor:pointer" onclick="openLightbox('${escAttr(u.mainPhotoUrl)}','${escAttr(u.mainPhotoName||'Unit '+u.id)}')">
+           <img src="${escAttr(u.mainPhotoUrl)}" alt="Unit ${u.id}" style="width:100%;height:100%;object-fit:cover;display:block">
+           <div style="position:absolute;inset:0;background:linear-gradient(to bottom,transparent 50%,rgba(7,11,4,.85))"></div>
+           <div style="position:absolute;bottom:10px;left:14px;right:14px;display:flex;justify-content:space-between;align-items:flex-end">
+             <span style="font-size:11px;color:#C4A26A;font-weight:700;letter-spacing:.04em">📷 Main Photo — click to expand</span>
+             <button onclick="event.stopPropagation();clearMainPhoto()" style="font-size:10px;background:rgba(0,0,0,.5);border:1px solid #C0392B;color:#F5A5A0;padding:3px 8px;border-radius:4px;cursor:pointer;font-weight:700">✕ Clear</button>
+           </div>
+         </div>`
+      : `<div style="width:100%;height:72px;background:#0D1509;border-bottom:1px solid #1C2D16;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;flex-shrink:0" onclick="switchTab('photos')">
+           <span style="font-size:20px">📷</span>
+           <span style="font-size:11px;color:#4D5C3D;font-weight:600">No main photo — open Photos tab to set one</span>
+         </div>`}
     <!-- Sticky Header -->
     <div style="position:sticky;top:0;background:#090E07;border-bottom:1px solid #1C2D16;z-index:10;padding:14px 16px 0">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
@@ -799,6 +813,31 @@ function drawPanel() {
             <div style="font-size:10px;color:#7A8C6A;margin-bottom:4px">Next Service</div>
             <div style="font-size:13px;font-weight:700;color:${dateColor(u.nextService)}">${fmtDate(u.nextService)||'Not scheduled'}</div>
           </div>
+        </div>
+        <div style="background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:12px;margin-bottom:12px">
+          <div style="font-size:10px;color:#7A8C6A;margin-bottom:8px;font-weight:700">Service Type</div>
+          <select id="ov_serviceType" onchange="updateServiceType(this.value)" style="width:100%;margin-bottom:${(u.nextServiceType==='Repair')?'8':'0'}px">
+            <option value="">— Select type —</option>
+            <option value="Maintenance Call" ${u.nextServiceType==='Maintenance Call'?'selected':''}>🔧 Maintenance Call</option>
+            <option value="Service Call" ${u.nextServiceType==='Service Call'?'selected':''}>📞 Service Call</option>
+            <option value="Warranty Work" ${u.nextServiceType==='Warranty Work'?'selected':''}>📋 Warranty Work</option>
+            <option value="Repair" ${u.nextServiceType==='Repair'?'selected':''}>🛠 Repair</option>
+          </select>
+          <div id="repairCategoryWrap" style="display:${u.nextServiceType==='Repair'?'block':'none'};margin-top:8px">
+            <div style="font-size:10px;color:#7A8C6A;margin-bottom:6px;font-weight:700">Repair Category</div>
+            <select id="ov_repairCategory" style="width:100%">
+              <option value="">— Select category —</option>
+              <option value="Drainage" ${u.repairCategory==='Drainage'?'selected':''}>💧 Drainage</option>
+              <option value="Electrical" ${u.repairCategory==='Electrical'?'selected':''}>⚡ Electrical</option>
+              <option value="Refrigerant" ${u.repairCategory==='Refrigerant'?'selected':''}>❄️ Refrigerant</option>
+              <option value="Compressor" ${u.repairCategory==='Compressor'?'selected':''}>🔩 Compressor</option>
+              <option value="Fan / Airflow" ${u.repairCategory==='Fan / Airflow'?'selected':''}>🌀 Fan / Airflow</option>
+              <option value="Controls / Thermostat" ${u.repairCategory==='Controls / Thermostat'?'selected':''}>🎛 Controls / Thermostat</option>
+              <option value="Install / Mounting" ${u.repairCategory==='Install / Mounting'?'selected':''}>🔨 Install / Mounting</option>
+              <option value="Other" ${u.repairCategory==='Other'?'selected':''}>📝 Other</option>
+            </select>
+          </div>
+          <button class="btn btn-gray" style="margin-top:8px;width:100%;font-size:11px" onclick="saveServiceType()">💾 Save Service Type</button>
         </div>
         <div style="background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:12px;margin-bottom:16px">
           <div style="font-size:10px;color:#7A8C6A;margin-bottom:8px;font-weight:700">Change Status</div>
@@ -1013,8 +1052,9 @@ function renderPhotoGrid() {
     return;
   }
 
+  const mainUrl = DATA[selectedId]?.mainPhotoUrl || '';
   grid.innerHTML = photos.map((p, i) => `
-    <div class="photo-card">
+    <div class="photo-card" style="${p.url===mainUrl?'border-color:#C4A26A;box-shadow:0 0 0 1px #C4A26A':''}">
       <img
         src="${escAttr(p.url)}"
         alt="${escAttr(p.name)}"
@@ -1023,6 +1063,9 @@ function renderPhotoGrid() {
         onerror="this.parentElement.style.opacity='.4'"
       >
       <button class="photo-del-btn" onclick="deletePhoto(${i})" title="Delete photo">✕</button>
+      ${p.url===mainUrl
+        ? `<div style="position:absolute;top:4px;left:4px;background:#8B6030;border:1px solid #C4A26A;color:#F5EDD8;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:800">⭐ MAIN</div>`
+        : `<button onclick="setMainPhoto(${i})" style="position:absolute;top:4px;left:4px;background:rgba(0,0,0,.6);border:1px solid #4D5C3D;color:#7A8C6A;cursor:pointer;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700;line-height:1" title="Set as main photo">⭐ Set Main</button>`}
       <div style="padding:6px 8px 8px">
         <div style="font-size:10px;color:#7A8C6A;font-weight:600">${fmtDate(p.date)}</div>
         <div style="font-size:10px;color:#4D5C3D;overflow:hidden;white-space:nowrap;text-overflow:ellipsis" title="${escAttr(p.name)}">${escHtml(p.name)}</div>
@@ -1114,6 +1157,27 @@ function uploadQueue(files, index, unitId) {
   );
 }
 
+function setMainPhoto(i) {
+  const u = DATA[selectedId];
+  if (!u || !u.photos || !u.photos[i]) return;
+  u.mainPhotoUrl  = u.photos[i].url;
+  u.mainPhotoName = u.photos[i].name;
+  persist();
+  drawPanel();
+  switchTab('photos');
+  showToast('⭐', 'Main photo set');
+}
+
+function clearMainPhoto() {
+  const u = DATA[selectedId];
+  if (!u) return;
+  u.mainPhotoUrl  = '';
+  u.mainPhotoName = '';
+  persist();
+  drawPanel();
+  showToast('🗑', 'Main photo cleared');
+}
+
 // ─── Delete photo ─────────────────────────────────────────
 async function deletePhoto(index) {
   if (!confirm('Delete this photo? This cannot be undone.')) return;
@@ -1180,6 +1244,21 @@ function saveNotes() {
   DATA[selectedId].notes = ta.value;
   persist();
   showToast('💾', 'Notes saved');
+}
+
+function updateServiceType(val) {
+  const wrap = document.getElementById('repairCategoryWrap');
+  if (wrap) wrap.style.display = val === 'Repair' ? 'block' : 'none';
+}
+
+function saveServiceType() {
+  const u = DATA[selectedId];
+  const typeEl = document.getElementById('ov_serviceType');
+  const catEl  = document.getElementById('ov_repairCategory');
+  if (typeEl) u.nextServiceType = typeEl.value;
+  if (catEl)  u.repairCategory  = catEl.value;
+  persist();
+  showToast('💾', 'Service type saved');
 }
 
 function saveHvac() {
