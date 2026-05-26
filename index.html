@@ -329,13 +329,16 @@
 ═══════════════════════════════════════════════ -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
 <script>
 // ════════════════════════════════════════════════════════════
 // FIREBASE INIT
 // ════════════════════════════════════════════════════════════
 let storage = null;
+let db = null;
 let firebaseReady = false;
+let firestoreReady = false;
 
 (function initFirebase() {
   try {
@@ -350,6 +353,8 @@ let firebaseReady = false;
     if (!firebase.apps.length) firebase.initializeApp(cfg);
     storage = firebase.storage();
     firebaseReady = true;
+    db = firebase.firestore();
+    firestoreReady = true;
   } catch(e) {
     console.warn('Firebase init failed:', e);
   }
@@ -425,16 +430,41 @@ let activeTab = 'overview';
 // ════════════════════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════════════════════
-function init() {
+async function init() {
+  // Show loading hint in stats bar
+  document.getElementById('statTotal').textContent = '…';
+
+  if (firestoreReady) {
+    try {
+      const snapshot = await db.collection('units').get();
+      if (!snapshot.empty) {
+        DATA = {};
+        snapshot.forEach(doc => {
+          const d = doc.data();
+          if (!d.photos) d.photos = [];
+          if (!d.serviceHistory) d.serviceHistory = [];
+          DATA[doc.id] = d;
+        });
+        localStorage.setItem('gota_hvac_v2', JSON.stringify(DATA));
+        renderMap();
+        updateStats();
+        return;
+      }
+    } catch(e) {
+      console.warn('Firestore load failed, using local fallback:', e);
+    }
+  }
+
+  // Fallback: localStorage or fresh defaults
   const saved = localStorage.getItem('gota_hvac_v2');
   if (saved) {
     DATA = JSON.parse(saved);
-    // Ensure all units have a photos array (backward compat)
     Object.values(DATA).forEach(u => { if (!u.photos) u.photos = []; });
   } else {
     buildDefaults();
-    persist();
   }
+  // Push local data up to Firestore in background
+  if (firestoreReady) syncToFirestore();
   renderMap();
   updateStats();
 }
@@ -449,7 +479,26 @@ function buildDefaults() {
   Object.entries(SAMPLES).forEach(([id, d]) => { if (DATA[id]) Object.assign(DATA[id], d); });
 }
 
-function persist() { localStorage.setItem('gota_hvac_v2', JSON.stringify(DATA)); }
+function persist(unitId = selectedId) {
+  localStorage.setItem('gota_hvac_v2', JSON.stringify(DATA));
+  if (!firestoreReady || !unitId) return;
+  db.collection('units').doc(String(unitId)).set(DATA[unitId])
+    .catch(e => console.error('Firestore save error:', e));
+}
+
+async function syncToFirestore() {
+  try {
+    // Firestore batch limit is 500 writes; with 152 units we're well under
+    const batch = db.batch();
+    Object.values(DATA).forEach(u => {
+      batch.set(db.collection('units').doc(String(u.id)), u);
+    });
+    await batch.commit();
+    console.log('Firestore: full sync complete');
+  } catch(e) {
+    console.error('Firestore sync failed:', e);
+  }
+}
 
 function confirmReset() {
   if (confirm('Reset ALL data to defaults? This cannot be undone.')) {
@@ -457,7 +506,8 @@ function confirmReset() {
     DATA = {};
     selectedId = null;
     buildDefaults();
-    persist();
+    localStorage.setItem('gota_hvac_v2', JSON.stringify(DATA));
+    if (firestoreReady) syncToFirestore();
     renderMap();
     updateStats();
     closePanel();
@@ -865,7 +915,7 @@ function uploadQueue(files, index, unitId) {
         const u = DATA[unitId];
         if (!u.photos) u.photos = [];
         u.photos.push({ url, name: file.name, path, date: toISO(new Date()) });
-        persist();
+        persist(unitId);
         renderPhotoGrid();
       } catch(e) {
         console.error('getDownloadURL error:', e);
