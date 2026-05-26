@@ -4,9 +4,10 @@
   <title>GOTA HVAC Management — Avant Development Group</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    /* ── ADG Color Palette ──────────────────────────────────────────
-       Tan:    #C4A26A  |  Forest Green: #2D5A1B / #4A8C2A / #A8D878
-       Red:    #C0392B  |  Cream text:   #F5EDD8
+    /* ── ADG Color Palette — Navy/Charcoal Edition ─────────────────
+       Tan:    #C4A26A  |  Navy dark:  #07090F / #0A0C16 / #0E1120
+       Red:    #C0392B  |  Cream text: #F5EDD8  | Steel:  #8898B0
+       Status greens/ambers/reds kept for functional clarity
     ──────────────────────────────────────────────────────────────── */
     *{box-sizing:border-box;margin:0;padding:0}
     body{background:transparent;color:#F5EDD8;font-family:'Inter',system-ui,sans-serif;overflow-x:hidden}
@@ -14,11 +15,11 @@
     /* ── Unit cells ── */
     .unit-cell{display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;cursor:pointer;border-radius:4px;border:1px solid;transition:transform .12s,box-shadow .12s;user-select:none;letter-spacing:.01em}
     .unit-cell:hover{transform:scale(1.12);z-index:20;position:relative;box-shadow:0 0 0 2px #C4A26A}
-    .unit-good      {background:rgba(26,59,14,0.92);border-color:#4A8C2A;color:#A8D878;box-shadow:0 1px 4px rgba(74,140,42,.18)}
-    .unit-due       {background:rgba(120,53,15,0.92);border-color:#f59e0b;color:#fde68a;box-shadow:0 1px 4px rgba(245,158,11,.18)}
-    .unit-overdue   {background:rgba(92,18,9,0.92);border-color:#C0392B;color:#F5A5A0;box-shadow:0 1px 4px rgba(192,57,43,.18)}
-    .unit-unconfigured{background:rgba(17,26,13,0.88);border-color:#253A1A;color:#7A8C6A}
-    .unit-not_ready  {background:rgba(13,21,9,0.80);border-color:#4D5C3D;color:#4D5C3D}
+    .unit-good      {background:rgba(16,40,12,0.95);border-color:#3A7A22;color:#90D060;box-shadow:0 1px 6px rgba(58,122,34,.30)}
+    .unit-due       {background:rgba(100,44,8,0.95);border-color:#E08800;color:#F5C840;box-shadow:0 1px 6px rgba(224,136,0,.28)}
+    .unit-overdue   {background:rgba(80,14,8,0.95);border-color:#C0392B;color:#F08080;box-shadow:0 1px 6px rgba(192,57,43,.28)}
+    .unit-unconfigured{background:rgba(14,16,28,0.90);border-color:#22304A;color:#5A7090}
+    .unit-not_ready  {background:rgba(10,12,22,0.82);border-color:#2A3550;color:#384870}
     .unit-selected  {outline:2px solid #C4A26A;outline-offset:2px}
     .unit-dimmed    {opacity:.18;pointer-events:none}
 
@@ -26,7 +27,7 @@
     #detailPanel{transition:transform .22s cubic-bezier(.4,0,.2,1)}
 
     /* ── Tabs ── */
-    .tab-btn{padding:8px 12px;font-size:11px;font-weight:600;color:#7A8C6A;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;transition:color .15s}
+    .tab-btn{padding:8px 12px;font-size:11px;font-weight:600;color:#7888A8;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;transition:color .15s}
     .tab-btn:hover{color:#DDD5B8}
     .tab-btn.active{color:#C4A26A;border-bottom-color:#C4A26A}
     .tab-content{display:none}
@@ -34,7 +35,7 @@
 
     /* ── Inputs ── */
     input,textarea,select{
-      background:#182212;border:1px solid #253A1A;color:#F5EDD8;
+      background:#0E1120;border:1px solid #1E2840;color:#F5EDD8;
       border-radius:6px;padding:7px 10px;font-size:13px;width:100%;outline:none;
       transition:border-color .15s;font-family:inherit
     }
@@ -43,40 +44,40 @@
 
     /* ── Buttons ── */
     .btn{padding:7px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid transparent;transition:background .15s,opacity .15s;display:inline-flex;align-items:center;justify-content:center;gap:5px;text-decoration:none;white-space:nowrap}
-    .btn-blue  {background:#2D5A1B;color:#A8D878;border-color:#4A8C2A}.btn-blue:hover{background:#3D7A25}
-    .btn-green {background:#1A3B0E;color:#A8D878;border-color:#4A8C2A}.btn-green:hover{background:#2D5A1B}
-    .btn-amber {background:#78350f;color:#fde68a;border-color:#f59e0b}.btn-amber:hover{background:#92400e}
-    .btn-red   {background:#5C1209;color:#F5A5A0;border-color:#C0392B}.btn-red:hover{background:#7A1A10}
-    .btn-gray  {background:#182212;color:#DDD5B8;border-color:#253A1A}.btn-gray:hover{background:#253A1A}
-    .btn-tan   {background:#8B6030;color:#F5EDD8;border-color:#C4A26A}.btn-tan:hover{background:#A07040}
+    .btn-blue  {background:#1A3A50;color:#90C8F0;border-color:#2A5878}.btn-blue:hover{background:#254E6A}
+    .btn-green {background:#0E2818;color:#90D060;border-color:#3A7A22}.btn-green:hover{background:#183C24}
+    .btn-amber {background:#78350f;color:#F5C840;border-color:#E08800}.btn-amber:hover{background:#92400e}
+    .btn-red   {background:#5C1209;color:#F08080;border-color:#C0392B}.btn-red:hover{background:#7A1A10}
+    .btn-gray  {background:#0E1120;color:#C8D0E0;border-color:#22304A}.btn-gray:hover{background:#161A2E}
+    .btn-tan   {background:#6A4420;color:#F5EDD8;border-color:#C4A26A}.btn-tan:hover{background:#8A5A2C}
 
     /* ── Modals ── */
-    .modal-wrap{position:fixed;inset:0;background:rgba(0,0,0,.80);backdrop-filter:blur(3px);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px}
-    .modal-box{background:#111A0D;border:1px solid #253A1A;border-radius:12px;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
+    .modal-wrap{position:fixed;inset:0;background:rgba(0,0,0,.82);backdrop-filter:blur(6px);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px}
+    .modal-box{background:#0C0E1A;border:1px solid #1E2840;border-radius:12px;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
 
     /* ── Scrollbars ── */
     ::-webkit-scrollbar{width:5px;height:5px}
-    ::-webkit-scrollbar-track{background:#111A0D}
-    ::-webkit-scrollbar-thumb{background:#2D5A1B;border-radius:3px}
-    ::-webkit-scrollbar-thumb:hover{background:#4A8C2A}
+    ::-webkit-scrollbar-track{background:#0A0C16}
+    ::-webkit-scrollbar-thumb{background:#C4A26A;border-radius:3px;opacity:.5}
+    ::-webkit-scrollbar-thumb:hover{background:#DDB87A}
 
     /* ── History timeline ── */
-    .hist-item{border-left:2px solid #4A8C2A;padding-left:14px;padding-bottom:18px;position:relative}
+    .hist-item{border-left:2px solid #C4A26A;padding-left:14px;padding-bottom:18px;position:relative}
     .hist-item::before{content:'';position:absolute;left:-5px;top:3px;width:8px;height:8px;background:#C4A26A;border-radius:50%}
     .hist-item:last-child{padding-bottom:0;border-left-color:transparent}
 
     /* ── Stat cards ── */
-    .stat-card{background:rgba(13,21,9,0.78);border:1px solid rgba(44,74,30,0.7);border-radius:8px;padding:10px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+    .stat-card{background:rgba(10,12,22,0.82);border:1px solid rgba(40,55,90,0.75);border-radius:8px;padding:10px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
 
     /* ── Map building groups ── */
     .map-strip{display:flex;flex-direction:column;gap:10px}
-    .bldg-group{background:rgba(10,16,7,0.78);border:1px solid rgba(28,45,22,0.8);border-radius:6px;padding:8px 7px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
-    .bldg-label{font-size:9px;font-weight:800;color:#4D5C3D;text-transform:uppercase;letter-spacing:.08em;text-align:center;margin-bottom:5px}
+    .bldg-group{background:rgba(8,10,18,0.80);border:1px solid rgba(30,40,65,0.85);border-radius:6px;padding:8px 7px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+    .bldg-label{font-size:9px;font-weight:800;color:#4A5878;text-transform:uppercase;letter-spacing:.08em;text-align:center;margin-bottom:5px}
     .units-grid{display:flex;flex-direction:column;gap:3px}
     .unit-row{display:flex;gap:3px}
 
     /* ── Toast ── */
-    #toast{position:fixed;bottom:20px;right:20px;background:#1A3B0E;border:1px solid #4A8C2A;color:#F5EDD8;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;z-index:99;display:flex;align-items:center;gap:8px;box-shadow:0 10px 25px rgba(0,0,0,.6);transform:translateY(80px);opacity:0;transition:transform .25s,opacity .25s}
+    #toast{position:fixed;bottom:20px;right:20px;background:#0E1120;border:1px solid #C4A26A;color:#F5EDD8;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;z-index:99;display:flex;align-items:center;gap:8px;box-shadow:0 10px 30px rgba(0,0,0,.7);transform:translateY(80px);opacity:0;transition:transform .25s,opacity .25s}
     #toast.show{transform:translateY(0);opacity:1}
 
     /* ── Responsive panel ── */
@@ -87,17 +88,17 @@
     /* ── Photo upload zone ── */
     .photo-drop-zone{
       display:flex;flex-direction:column;align-items:center;justify-content:center;
-      border:2px dashed #253A1A;border-radius:10px;padding:24px 16px;cursor:pointer;
+      border:2px dashed #22304A;border-radius:10px;padding:24px 16px;cursor:pointer;
       transition:border-color .2s,background .2s;text-align:center;gap:6px
     }
-    .photo-drop-zone:hover,.photo-drop-zone.drag-over{border-color:#C4A26A;background:#0D1509}
+    .photo-drop-zone:hover,.photo-drop-zone.drag-over{border-color:#C4A26A;background:#0A0C18}
 
     /* ── Photo grid ── */
-    .photo-card{position:relative;border-radius:8px;overflow:hidden;border:1px solid #1C2D16;background:#0D1509;transition:border-color .15s}
-    .photo-card:hover{border-color:#4A8C2A}
+    .photo-card{position:relative;border-radius:8px;overflow:hidden;border:1px solid #1A2438;background:#0A0C18;transition:border-color .15s}
+    .photo-card:hover{border-color:#C4A26A}
     .photo-card img{width:100%;height:110px;object-fit:cover;cursor:pointer;display:block}
-    .photo-del-btn{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.72);border:none;color:#F5A5A0;cursor:pointer;padding:3px 7px;border-radius:4px;font-size:11px;font-weight:800;line-height:1;transition:background .15s}
-    .photo-del-btn:hover{background:rgba(92,18,9,.9)}
+    .photo-del-btn{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.72);border:none;color:#F08080;cursor:pointer;padding:3px 7px;border-radius:4px;font-size:11px;font-weight:800;line-height:1;transition:background .15s}
+    .photo-del-btn:hover{background:rgba(80,14,8,.9)}
 
     /* ── Lightbox ── */
     #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:200;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;cursor:pointer}
@@ -106,16 +107,17 @@
     #lightboxCaption{font-size:12px;color:#A8D878}
 
     /* ── Page background layers ── */
-    /* Layer -2: full photo */
+    /* Layer -2: full photo — boosted brightness */
     body::before{
       content:'';position:fixed;inset:0;z-index:-2;
       background:url('GOTA%20INSIDE%20SHOT.png') center/cover fixed;
+      filter:brightness(1.5) contrast(1.08) saturate(1.1);
       pointer-events:none
     }
-    /* Layer -1: dark green tint overlay so UI stays readable */
+    /* Layer -1: dark navy tint — lighter so photo breathes through */
     body::after{
       content:'';position:fixed;inset:0;z-index:-1;
-      background:rgba(4,7,2,0.72);
+      background:rgba(6,8,14,0.52);
       pointer-events:none
     }
 
@@ -126,15 +128,14 @@
     }
     #welcomeHero{
       width:100%;height:100%;object-fit:cover;position:absolute;inset:0;
-      opacity:.82;
-      /* subtle enhancement */
-      filter:contrast(1.06) saturate(1.08) brightness(1.05)
+      opacity:.92;
+      filter:brightness(1.18) contrast(1.06) saturate(1.12)
     }
     /* gradient fade at edges for blending */
     #welcomePanel::after{
       content:'';position:absolute;inset:0;z-index:0;
-      background:linear-gradient(to right, rgba(4,7,2,0.55) 0%, transparent 20%, transparent 80%, rgba(4,7,2,0.55) 100%),
-                 linear-gradient(to bottom, rgba(4,7,2,0.3) 0%, transparent 15%, transparent 75%, rgba(4,7,2,0.7) 100%);
+      background:linear-gradient(to right, rgba(6,8,14,0.65) 0%, transparent 18%, transparent 82%, rgba(6,8,14,0.65) 100%),
+                 linear-gradient(to bottom, rgba(6,8,14,0.35) 0%, transparent 12%, transparent 72%, rgba(6,8,14,0.80) 100%);
       pointer-events:none
     }
     #welcomeOverlay{
@@ -148,7 +149,7 @@
 <!-- ═══════════════════════════════════════════════
      HEADER
 ═══════════════════════════════════════════════ -->
-<header style="background:rgba(6,10,4,0.88);border-bottom:1px solid rgba(44,74,30,0.6);position:sticky;top:0;z-index:30;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)">
+<header style="background:rgba(6,8,14,0.92);border-bottom:1px solid rgba(40,55,90,0.55);position:sticky;top:0;z-index:30;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)">
   <div style="padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
     <!-- Brand -->
     <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
@@ -195,7 +196,7 @@
 <!-- ═══════════════════════════════════════════════
      STATS BAR
 ═══════════════════════════════════════════════ -->
-<div style="background:rgba(5,8,3,0.82);border-bottom:1px solid rgba(44,74,30,0.5);padding:8px 16px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)">
+<div style="background:rgba(5,7,12,0.85);border-bottom:1px solid rgba(40,55,90,0.45);padding:8px 16px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)">
   <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;align-items:center">
     <div class="stat-card">
       <span style="font-size:22px;font-weight:800;color:#F5EDD8" id="statTotal">152</span>
@@ -293,7 +294,7 @@
   </div>
 
   <!-- ── DETAIL PANEL ── -->
-  <div id="detailPanel" style="width:430px;flex-shrink:0;border-left:1px solid rgba(44,74,30,0.5);background:rgba(6,10,4,0.90);overflow-y:auto;display:none;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)"></div>
+  <div id="detailPanel" style="width:430px;flex-shrink:0;border-left:1px solid rgba(40,55,90,0.45);background:rgba(6,8,14,0.93);overflow-y:auto;display:none;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)"></div>
 </div>
 
 <!-- ═══════════════════════════════════════════════
@@ -904,7 +905,7 @@ function drawPanel() {
            <span style="font-size:11px;color:#4D5C3D;font-weight:600">No main photo — open Photos tab to set one</span>
          </div>`}
     <!-- Sticky Header -->
-    <div style="position:sticky;top:0;background:rgba(6,10,4,0.95);border-bottom:1px solid rgba(44,74,30,0.5);z-index:10;padding:14px 16px 0;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)">
+    <div style="position:sticky;top:0;background:rgba(6,8,14,0.97);border-bottom:1px solid rgba(40,55,90,0.45);z-index:10;padding:14px 16px 0;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
         <div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
