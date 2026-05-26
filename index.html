@@ -104,6 +104,25 @@
     #lightbox.open{display:flex}
     #lightbox img{max-width:90vw;max-height:82vh;border-radius:8px;object-fit:contain;box-shadow:0 20px 60px rgba(0,0,0,.6)}
     #lightboxCaption{font-size:12px;color:#A8D878}
+
+    /* ── Page background photo ── */
+    body::before{
+      content:'';position:fixed;inset:0;z-index:-1;
+      background-image:url('images/gota-bg.jpg');
+      background-size:cover;background-position:center;background-attachment:fixed;
+      opacity:.12;pointer-events:none
+    }
+
+    /* ── Welcome panel ── */
+    #welcomePanel{
+      flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+      overflow:hidden;position:relative
+    }
+    #welcomeHero{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;opacity:.45}
+    #welcomeOverlay{
+      position:relative;z-index:1;display:flex;flex-direction:column;
+      align-items:center;justify-content:center;height:100%;gap:16px;padding:32px 24px;text-align:center
+    }
   </style>
 </head>
 <body>
@@ -228,6 +247,33 @@
     </table>
   </div>
 
+  <!-- ── WELCOME PANEL (shown when no unit selected) ── -->
+  <div id="welcomePanel">
+    <img id="welcomeHero" src="images/gota-exterior.jpg" alt="Garages of the Americas" onerror="this.style.display='none'">
+    <div id="welcomeOverlay">
+      <div style="background:rgba(7,11,4,.65);border:1px solid #2D5A1B;border-radius:16px;padding:28px 32px;max-width:420px;backdrop-filter:blur(4px)">
+        <div style="font-size:11px;font-weight:800;color:#C4A26A;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px">Garages of the Americas</div>
+        <div style="font-size:26px;font-weight:900;color:#F5EDD8;line-height:1.2;margin-bottom:8px">GOTA HVAC<br>Management</div>
+        <div style="font-size:12px;color:#7A8C6A;margin-bottom:20px;line-height:1.6">152 units · Austin, TX<br>Select any unit on the map to view details, log service, or schedule work.</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:#B8C9A0">
+            <div style="width:8px;height:8px;border-radius:50%;background:#4A8C2A;flex-shrink:0"></div>
+            <span id="wStatGood" style="font-weight:700;color:#A8D878">—</span> units marked Done
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:#B8C9A0">
+            <div style="width:8px;height:8px;border-radius:50%;background:#f59e0b;flex-shrink:0"></div>
+            <span id="wStatDue" style="font-weight:700;color:#fde68a">—</span> need attention soon
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:#B8C9A0">
+            <div style="width:8px;height:8px;border-radius:50%;background:#C0392B;flex-shrink:0"></div>
+            <span id="wStatOver" style="font-weight:700;color:#F5A5A0">—</span> overdue
+          </div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#4D5C3D;letter-spacing:.04em">← Click any unit to open its profile</div>
+    </div>
+  </div>
+
   <!-- ── DETAIL PANEL ── -->
   <div id="detailPanel" style="width:430px;flex-shrink:0;border-left:1px solid #1C2D16;background:#090E07;overflow-y:auto;display:none"></div>
 </div>
@@ -313,20 +359,50 @@
 ═══════════════════════════════════════════════ -->
 <div id="scheduleModal" class="modal-wrap" style="display:none" onclick="if(event.target===this)closeModal('scheduleModal')">
   <div class="modal-box" onclick="event.stopPropagation()">
-    <h3 style="font-size:16px;font-weight:800;margin-bottom:16px">📅 Schedule Maintenance — Unit <span id="schedUnitLabel"></span></h3>
+    <h3 style="font-size:16px;font-weight:800;margin-bottom:14px">📅 Schedule Work — Unit <span id="schedUnitLabel"></span></h3>
+
+    <!-- Quick-fill row -->
+    <div style="background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:10px;margin-bottom:16px">
+      <div style="font-size:10px;font-weight:800;color:#4D5C3D;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">⚡ Quick Fill</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <button type="button" class="btn btn-tan" style="font-size:11px" onclick="schedQuickFill('Insulate Manifold','Repair','Install / Mounting')">🔧 Insulate Manifold</button>
+        <button type="button" class="btn btn-gray" style="font-size:11px" onclick="schedQuickFill('Filter Change','Maintenance Call','')">🔄 Filter Change</button>
+        <button type="button" class="btn btn-gray" style="font-size:11px" onclick="schedQuickFill('Annual Maintenance','Maintenance Call','')">📋 Annual Maint.</button>
+        <button type="button" class="btn btn-gray" style="font-size:11px" onclick="schedQuickFill('Refrigerant Check','Service Call','Refrigerant')">❄️ Refrigerant</button>
+      </div>
+    </div>
+
     <div style="display:flex;flex-direction:column;gap:12px">
       <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Service Date</label>
         <input type="date" id="schedDate"></div>
       <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Service Type</label>
-        <select id="schedType">
-          <option>Annual Maintenance</option>
-          <option>Semi-Annual Maintenance</option>
-          <option>Filter Replacement</option>
-          <option>Repair</option>
-          <option>Inspection</option>
-          <option>Refrigerant Check</option>
-          <option>Emergency Service</option>
+        <select id="schedType" onchange="schedToggleCategory(this.value)">
+          <option value="">— Select type —</option>
+          <option value="Insulate Manifold">🔧 Insulate Manifold</option>
+          <option value="Maintenance Call">🔨 Maintenance Call</option>
+          <option value="Annual Maintenance">📅 Annual Maintenance</option>
+          <option value="Filter Change">🔄 Filter Change</option>
+          <option value="Service Call">📞 Service Call</option>
+          <option value="Warranty Work">📋 Warranty Work</option>
+          <option value="Repair">🛠 Repair</option>
+          <option value="Refrigerant Check">❄️ Refrigerant Check</option>
+          <option value="Inspection">🔍 Inspection</option>
+          <option value="Emergency Service">🚨 Emergency Service</option>
         </select></div>
+      <div id="schedCategoryWrap" style="display:none">
+        <label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Repair Category</label>
+        <select id="schedRepairCategory">
+          <option value="">— Select category —</option>
+          <option value="Drainage">💧 Drainage</option>
+          <option value="Electrical">⚡ Electrical</option>
+          <option value="Refrigerant">❄️ Refrigerant</option>
+          <option value="Compressor">🔩 Compressor</option>
+          <option value="Fan / Airflow">🌀 Fan / Airflow</option>
+          <option value="Controls / Thermostat">🎛 Controls / Thermostat</option>
+          <option value="Install / Mounting">🔨 Install / Mounting</option>
+          <option value="Other">📝 Other</option>
+        </select>
+      </div>
       <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Assigned Technician</label>
         <input type="text" id="schedTech" placeholder="Tech name"></div>
       <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Notes</label>
@@ -514,6 +590,7 @@ async function init() {
           if (!d.mainPhotoUrl) d.mainPhotoUrl = '';
           if (!d.mainPhotoName) d.mainPhotoName = '';
           if (!d.techNotes) d.techNotes = '';
+          if (!d.scheduledWork) d.scheduledWork = [];
           DATA[doc.id] = d;
         });
         localStorage.setItem('gota_hvac_v2', JSON.stringify(DATA));
@@ -561,7 +638,7 @@ function buildDefaults() {
       nextServiceType:'', repairCategory:'',
       mainPhotoUrl:'', mainPhotoName:'',
       techNotes:'',
-      ownerName:'', ownerPhone:'', ownerEmail:'', notes:'', photos:[], serviceHistory:[]
+      ownerName:'', ownerPhone:'', ownerEmail:'', notes:'', photos:[], serviceHistory:[], scheduledWork:[]
     };
   }))));
   Object.entries(SAMPLES).forEach(([id, d]) => { if (DATA[id]) Object.assign(DATA[id], d); });
@@ -767,6 +844,8 @@ function openUnit(id) {
   if (cell) cell.classList.add('unit-selected');
   const panel = document.getElementById('detailPanel');
   panel.style.display = 'block';
+  const welcome = document.getElementById('welcomePanel');
+  if (welcome) welcome.style.display = 'none';
   activeTab = 'overview';
   drawPanel();
   setupAutoSave();
@@ -774,6 +853,8 @@ function openUnit(id) {
 
 function closePanel() {
   document.getElementById('detailPanel').style.display = 'none';
+  const welcome = document.getElementById('welcomePanel');
+  if (welcome) welcome.style.display = 'flex';
   document.querySelectorAll('.unit-cell').forEach(c => c.classList.remove('unit-selected'));
   selectedId = null;
 }
@@ -835,6 +916,7 @@ function drawPanel() {
         <button class="tab-btn ${activeTab==='history'?'active':''}" id="tb-history" onclick="switchTab('history')">History (${u.serviceHistory?.length||0})</button>
         <button class="tab-btn ${activeTab==='photos'?'active':''}" id="tb-photos" onclick="switchTab('photos')">📷 Photos${photoCount ? ' ('+photoCount+')' : ''}</button>
         <button class="tab-btn ${activeTab==='contractor'?'active':''}" id="tb-contractor" onclick="switchTab('contractor')">🏗 Contractor</button>
+        <button class="tab-btn ${activeTab==='schedule'?'active':''}" id="tb-schedule" onclick="switchTab('schedule')">📅 Schedule${(()=>{const p=(u.scheduledWork||[]).filter(i=>i.status!=='completed'&&i.status!=='cancelled').length;return p?' ('+p+')':'';})()}</button>
       </div>
     </div>
 
@@ -933,24 +1015,7 @@ function drawPanel() {
           <span style="font-size:11px;color:#7A8C6A">${u.serviceHistory?.length||0} records</span>
         </div>
         ${u.serviceHistory && u.serviceHistory.length
-          ? `<div>${[...u.serviceHistory].reverse().map(e=>`
-              <div class="hist-item">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px">
-                  <div style="font-size:11px;font-weight:700;color:#C4A26A">${fmtDate(e.date)}</div>
-                  ${e.serviceType ? `<span style="font-size:9px;background:#182212;border:1px solid #253A1A;color:#7A8C6A;padding:1px 6px;border-radius:10px">${escHtml(e.serviceType)}</span>` : ''}
-                </div>
-                <div style="font-size:13px;color:#DDD5B8;margin-bottom:4px">${escHtml(e.action)}</div>
-                <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:#7A8C6A;margin-bottom:${(e.materials&&e.materials.length)||(e.nextNotes)?'8':'0'}px">
-                  <span>🔧 ${escHtml(e.tech||'Unknown')}</span>
-                  ${e.hours ? `<span>⏱ ${e.hours}h</span>` : ''}
-                  ${e.repairCat ? `<span>🏷 ${escHtml(e.repairCat)}</span>` : ''}
-                </div>
-                ${e.materials && e.materials.length ? `<div style="background:#0D1509;border:1px solid #1C2D16;border-radius:6px;padding:6px 8px;margin-bottom:4px">
-                  <div style="font-size:9px;color:#4D5C3D;font-weight:700;letter-spacing:.04em;margin-bottom:4px">MATERIALS</div>
-                  ${e.materials.map(m=>`<div style="font-size:11px;color:#B8C9A0">· ${escHtml(m.name)} — ${m.qty} ${escHtml(m.unit)}</div>`).join('')}
-                </div>` : ''}
-                ${e.nextNotes ? `<div style="font-size:11px;color:#C4A26A;font-style:italic;border-left:2px solid #C4A26A;padding-left:6px">📌 Next visit: ${escHtml(e.nextNotes)}</div>` : ''}
-              </div>`).join('')}</div>`
+          ? `<div>${[...u.serviceHistory].reverse().map((e,di) => historyItemHtml(e, u.serviceHistory.length-1-di)).join('')}</div>`
           : `<div style="text-align:center;padding:32px 16px;color:#4D5C3D">
                <div style="font-size:32px;margin-bottom:8px">🔧</div>
                <div style="font-size:14px;font-weight:600;color:#7A8C6A">No service history yet</div>
@@ -967,6 +1032,11 @@ function drawPanel() {
       <!-- CONTRACTOR -->
       <div class="tab-content ${activeTab==='contractor'?'active':''}" id="tc-contractor">
         ${contractorTabHtml(u)}
+      </div>
+
+      <!-- SCHEDULE -->
+      <div class="tab-content ${activeTab==='schedule'?'active':''}" id="tc-schedule">
+        ${scheduleTabHtml(u)}
       </div>
 
     </div>`;
@@ -1581,29 +1651,40 @@ function submitLog() {
   showToast('✅', 'Service entry logged');
 }
 
-function openScheduleModal() {
-  const u = DATA[selectedId];
+function openScheduleModal(prefill) {
   document.getElementById('schedUnitLabel').textContent = '#' + selectedId;
-  document.getElementById('schedDate').value = u.nextService || '';
+  document.getElementById('schedDate').value = '';
+  const typeEl = document.getElementById('schedType');
+  if (typeEl) typeEl.value = prefill?.type || '';
+  schedToggleCategory(prefill?.type || '');
+  const catEl = document.getElementById('schedRepairCategory');
+  if (catEl) catEl.value = prefill?.category || '';
   document.getElementById('schedTech').value = '';
   document.getElementById('schedNotes').value = '';
   document.getElementById('scheduleModal').style.display = 'flex';
 }
 
 function submitSchedule() {
-  const date = document.getElementById('schedDate').value;
-  const type = document.getElementById('schedType').value;
+  const date  = document.getElementById('schedDate').value;
+  const type  = document.getElementById('schedType').value;
+  const cat   = document.getElementById('schedRepairCategory')?.value || '';
+  const tech  = document.getElementById('schedTech').value;
+  const notes = document.getElementById('schedNotes').value;
   if (!date) { showToast('⚠️', 'Please select a date'); return; }
+  if (!type) { showToast('⚠️', 'Please select a service type'); return; }
   const u = DATA[selectedId];
-  u.nextService = date;
-  autoStatus(selectedId);
+  if (!u.scheduledWork) u.scheduledWork = [];
+  u.scheduledWork.push({ id: Date.now(), date, type, repairCategory: cat, tech: tech||'', notes: notes||'', status:'pending' });
+  // Set nextService to earliest pending item
+  const earliest = u.scheduledWork.filter(i=>i.status==='pending').map(i=>i.date).sort()[0];
+  if (earliest) { u.nextService = earliest; autoStatus(selectedId); }
   persist();
   closeModal('scheduleModal');
   drawPanel();
-  switchTab('overview');
+  switchTab('schedule');
   refreshCell(selectedId);
   updateStats();
-  showToast('📅', `${type} scheduled: ${fmtDate(date)}`);
+  showToast('📅', `${type} scheduled for ${fmtDate(date)}`);
 }
 
 function openTextModal() {
@@ -1637,6 +1718,141 @@ function sendText() {
 }
 
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+// ── Schedule helpers ──────────────────────────────────────
+function schedToggleCategory(val) {
+  const wrap = document.getElementById('schedCategoryWrap');
+  if (wrap) wrap.style.display = val === 'Repair' ? 'block' : 'none';
+}
+
+function schedQuickFill(type, serviceType, category) {
+  const typeEl = document.getElementById('schedType');
+  if (typeEl) { typeEl.value = type; schedToggleCategory(type); }
+  const catEl = document.getElementById('schedRepairCategory');
+  if (catEl && category) catEl.value = category;
+}
+
+function quickSchedule(type, serviceType, category) {
+  openScheduleModal({ type, category });
+}
+
+function completeScheduledItem(idx) {
+  const u = DATA[selectedId];
+  if (!u.scheduledWork || !u.scheduledWork[idx]) return;
+  u.scheduledWork[idx].status = 'completed';
+  u.scheduledWork[idx].completedDate = toISO(new Date());
+  const pending = u.scheduledWork.filter(i=>i.status==='pending').map(i=>i.date).sort();
+  if (pending.length) { u.nextService = pending[0]; autoStatus(selectedId); }
+  persist(); drawPanel(); switchTab('schedule'); refreshCell(selectedId); updateStats();
+  showToast('✅', 'Marked complete');
+}
+
+function deleteScheduledItem(idx) {
+  if (!confirm('Delete this scheduled item?')) return;
+  const u = DATA[selectedId];
+  if (!u.scheduledWork) return;
+  u.scheduledWork.splice(idx, 1);
+  const pending = u.scheduledWork.filter(i=>i.status==='pending').map(i=>i.date).sort();
+  if (pending.length) { u.nextService = pending[0]; autoStatus(selectedId); }
+  persist(); drawPanel(); switchTab('schedule'); refreshCell(selectedId); updateStats();
+  showToast('🗑', 'Removed');
+}
+
+function deleteHistoryItem(idx) {
+  if (!confirm('Delete this service record? This cannot be undone.')) return;
+  const u = DATA[selectedId];
+  if (!u.serviceHistory) return;
+  u.serviceHistory.splice(idx, 1);
+  persist(); drawPanel(); switchTab('history');
+  showToast('🗑', 'History entry deleted');
+}
+
+function historyItemHtml(e, origIdx) {
+  return `
+    <div class="hist-item">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px">
+        <div style="font-size:11px;font-weight:700;color:#C4A26A">${fmtDate(e.date)}</div>
+        <div style="display:flex;align-items:center;gap:5px">
+          ${e.serviceType ? `<span style="font-size:9px;background:#182212;border:1px solid #253A1A;color:#7A8C6A;padding:1px 6px;border-radius:10px">${escHtml(e.serviceType)}</span>` : ''}
+          <button onclick="deleteHistoryItem(${origIdx})" style="font-size:10px;background:none;border:1px solid #5C1209;color:#F5A5A0;cursor:pointer;padding:1px 6px;border-radius:4px;font-weight:800;line-height:1.5;opacity:.7" title="Delete record" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.7">✕</button>
+        </div>
+      </div>
+      <div style="font-size:13px;color:#DDD5B8;margin-bottom:4px">${escHtml(e.action)}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:#7A8C6A;margin-bottom:${(e.materials&&e.materials.length)||(e.nextNotes)?'8':'0'}px">
+        <span>🔧 ${escHtml(e.tech||'Unknown')}</span>
+        ${e.hours ? `<span>⏱ ${e.hours}h</span>` : ''}
+        ${e.repairCat ? `<span>🏷 ${escHtml(e.repairCat)}</span>` : ''}
+      </div>
+      ${e.materials && e.materials.length ? `<div style="background:#0D1509;border:1px solid #1C2D16;border-radius:6px;padding:6px 8px;margin-bottom:4px">
+        <div style="font-size:9px;color:#4D5C3D;font-weight:700;letter-spacing:.04em;margin-bottom:4px">MATERIALS</div>
+        ${e.materials.map(m=>`<div style="font-size:11px;color:#B8C9A0">· ${escHtml(m.name)} — ${m.qty} ${escHtml(m.unit)}</div>`).join('')}
+      </div>` : ''}
+      ${e.nextNotes ? `<div style="font-size:11px;color:#C4A26A;font-style:italic;border-left:2px solid #C4A26A;padding-left:6px">📌 Next visit: ${escHtml(e.nextNotes)}</div>` : ''}
+    </div>`;
+}
+
+function schedItemCard(item, idx) {
+  const isPending = item.status !== 'completed' && item.status !== 'cancelled';
+  const isOverdue = isPending && item.date < toISO(new Date());
+  const dc = item.status==='completed' ? '#4A8C2A' : isOverdue ? '#F5A5A0' : '#C4A26A';
+  const bc = isOverdue ? '#C0392B44' : '#1C2D16';
+  return `
+    <div style="background:#0D1509;border:1px solid ${bc};border-radius:8px;padding:10px 12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap">
+            <span style="font-size:13px;font-weight:700;color:#F5EDD8">${escHtml(item.type)}</span>
+            ${item.repairCategory ? `<span style="font-size:9px;background:#182212;border:1px solid #253A1A;color:#7A8C6A;padding:1px 6px;border-radius:10px">${escHtml(item.repairCategory)}</span>` : ''}
+            ${item.status==='completed' ? `<span style="font-size:9px;background:#1A3B0E;border:1px solid #4A8C2A;color:#A8D878;padding:1px 6px;border-radius:10px">✅ Done</span>` : isOverdue ? `<span style="font-size:9px;background:#5C1209;border:1px solid #C0392B;color:#F5A5A0;padding:1px 6px;border-radius:10px">⚠️ Past Due</span>` : ''}
+          </div>
+          <div style="font-size:11px;font-weight:700;color:${dc}">📅 ${fmtDate(item.date)}</div>
+          ${item.tech ? `<div style="font-size:11px;color:#7A8C6A;margin-top:2px">👤 ${escHtml(item.tech)}</div>` : ''}
+          ${item.notes ? `<div style="font-size:11px;color:#B8C9A0;margin-top:4px;font-style:italic">${escHtml(item.notes)}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:4px;flex-shrink:0">
+          ${isPending ? `<button onclick="completeScheduledItem(${idx})" style="font-size:12px;background:#1A3B0E;border:1px solid #4A8C2A;color:#A8D878;cursor:pointer;padding:5px 9px;border-radius:5px;font-weight:800;line-height:1" title="Mark complete">✓</button>` : ''}
+          <button onclick="deleteScheduledItem(${idx})" style="font-size:12px;background:#5C1209;border:1px solid #C0392B;color:#F5A5A0;cursor:pointer;padding:5px 9px;border-radius:5px;font-weight:800;line-height:1" title="Delete">✕</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function scheduleTabHtml(u) {
+  const all = u.scheduledWork || [];
+  const pending = all.filter(i=>i.status!=='completed'&&i.status!=='cancelled').sort((a,b)=>a.date.localeCompare(b.date));
+  const completed = all.filter(i=>i.status==='completed').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,3);
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:10px;font-weight:800;color:#4D5C3D;letter-spacing:.08em;text-transform:uppercase">Scheduled Work</div>
+      <span style="font-size:11px;color:#7A8C6A">${pending.length} pending</span>
+    </div>
+    <div style="background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:10px;margin-bottom:14px">
+      <div style="font-size:10px;font-weight:800;color:#4D5C3D;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">⚡ Quick Schedule</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <button class="btn btn-tan" style="font-size:11px" onclick="quickSchedule('Insulate Manifold','Repair','Install / Mounting')">🔧 Insulate Manifold</button>
+        <button class="btn btn-gray" style="font-size:11px" onclick="quickSchedule('Filter Change','Maintenance Call','')">🔄 Filter Change</button>
+        <button class="btn btn-gray" style="font-size:11px" onclick="quickSchedule('Annual Maintenance','Maintenance Call','')">📋 Annual Maint.</button>
+        <button class="btn btn-gray" style="font-size:11px" onclick="quickSchedule('Refrigerant Check','Service Call','Refrigerant')">❄️ Refrigerant</button>
+      </div>
+    </div>
+    ${pending.length === 0
+      ? `<div style="text-align:center;padding:28px 16px;color:#4D5C3D">
+           <div style="font-size:32px;margin-bottom:8px">📅</div>
+           <div style="font-size:14px;font-weight:600;color:#7A8C6A">Nothing scheduled yet</div>
+           <div style="font-size:12px;margin-top:4px">Tap a quick button above or click Schedule below.</div>
+         </div>`
+      : `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px">
+           ${pending.map(item => schedItemCard(item, all.indexOf(item))).join('')}
+         </div>`}
+    ${completed.length > 0 ? `
+      <div style="margin-top:14px">
+        <div style="font-size:10px;font-weight:800;color:#4D5C3D;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px">Recently Completed</div>
+        <div style="display:flex;flex-direction:column;gap:6px;opacity:.55">
+          ${completed.map(item => schedItemCard(item, all.indexOf(item))).join('')}
+        </div>
+      </div>` : ''}
+    <button class="btn btn-blue" style="margin-top:16px;width:100%;font-size:13px" onclick="openScheduleModal()">+ Schedule New Work</button>`;
+}
 
 function logToggleRepair(val) {
   const w = document.getElementById('logRepairCatWrap');
@@ -1728,16 +1944,26 @@ function applyFilter() {
 function updateStats() {
   const all = Object.values(DATA);
   const now = new Date();
+  const g = all.filter(u=>u.status==='good').length;
+  const d = all.filter(u=>u.status==='due').length;
+  const o = all.filter(u=>u.status==='overdue').length;
   document.getElementById('statTotal').textContent = all.length;
-  document.getElementById('statGood').textContent = all.filter(u=>u.status==='good').length;
-  document.getElementById('statDue').textContent = all.filter(u=>u.status==='due').length;
-  document.getElementById('statOverdue').textContent = all.filter(u=>u.status==='overdue').length;
+  document.getElementById('statGood').textContent = g;
+  document.getElementById('statDue').textContent = d;
+  document.getElementById('statOverdue').textContent = o;
   document.getElementById('statUnconfig').textContent = all.filter(u=>u.status==='unconfigured').length;
   document.getElementById('statUpcoming').textContent = all.filter(u => {
     if (!u.nextService) return false;
-    const d = (new Date(u.nextService) - now) / 86400000;
-    return d >= 0 && d <= 30;
+    const diff = (new Date(u.nextService) - now) / 86400000;
+    return diff >= 0 && diff <= 30;
   }).length;
+  // Welcome panel stats
+  const wg = document.getElementById('wStatGood');
+  const wd = document.getElementById('wStatDue');
+  const wo = document.getElementById('wStatOver');
+  if (wg) wg.textContent = g;
+  if (wd) wd.textContent = d;
+  if (wo) wo.textContent = o;
 }
 
 // ════════════════════════════════════════════════════════════
