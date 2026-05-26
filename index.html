@@ -248,16 +248,54 @@
   <div class="modal-box" onclick="event.stopPropagation()">
     <h3 style="font-size:16px;font-weight:800;margin-bottom:16px">📋 Log Service Work — Unit <span id="logUnitLabel"></span></h3>
     <div style="display:flex;flex-direction:column;gap:12px">
-      <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Date</label>
-        <input type="date" id="logDate"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Date</label>
+          <input type="date" id="logDate"></div>
+        <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Hours Spent</label>
+          <input type="number" id="logHours" placeholder="e.g. 2.5" min="0" step="0.25"></div>
+      </div>
       <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Technician</label>
         <input type="text" id="logTech" placeholder="Tech name"></div>
+      <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Service Type</label>
+        <select id="logServiceType" onchange="logToggleRepair(this.value)">
+          <option value="">— Select type —</option>
+          <option value="Maintenance Call">🔧 Maintenance Call</option>
+          <option value="Service Call">📞 Service Call</option>
+          <option value="Warranty Work">📋 Warranty Work</option>
+          <option value="Repair">🛠 Repair</option>
+        </select></div>
+      <div id="logRepairCatWrap" style="display:none"><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Repair Category</label>
+        <select id="logRepairCategory">
+          <option value="">— Select category —</option>
+          <option value="Drainage">💧 Drainage</option>
+          <option value="Electrical">⚡ Electrical</option>
+          <option value="Refrigerant">❄️ Refrigerant</option>
+          <option value="Compressor">🔩 Compressor</option>
+          <option value="Fan / Airflow">🌀 Fan / Airflow</option>
+          <option value="Controls / Thermostat">🎛 Controls / Thermostat</option>
+          <option value="Install / Mounting">🔨 Install / Mounting</option>
+          <option value="Other">📝 Other</option>
+        </select></div>
       <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Work Performed</label>
-        <textarea id="logAction" rows="4" placeholder="Describe work done…" style="resize:vertical"></textarea></div>
+        <textarea id="logAction" rows="3" placeholder="Describe work done…" style="resize:vertical"></textarea></div>
+      <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Next Visit Notes</label>
+        <textarea id="logNextNotes" rows="2" placeholder="Things to check or do on next visit…" style="resize:vertical"></textarea></div>
+
+      <!-- Materials Used -->
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <label style="font-size:11px;color:#7A8C6A;font-weight:700">Materials Used</label>
+          <button type="button" class="btn btn-green" style="font-size:10px;padding:3px 8px" onclick="addLogMaterial()">+ Add</button>
+        </div>
+        <div id="logMaterialsList" style="display:flex;flex-direction:column;gap:6px">
+          <div style="text-align:center;font-size:11px;color:#4D5C3D;padding:8px" id="logNoMaterials">No materials added</div>
+        </div>
+      </div>
+
       <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Set Status After Service</label>
         <select id="logStatus">
-          <option value="good">✅ Good — All systems normal</option>
-          <option value="due">⚠️ Due Soon — Monitor closely</option>
+          <option value="good">✅ Done — All systems normal</option>
+          <option value="due">🟡 Work on Soon — Monitor closely</option>
           <option value="overdue">🔴 Needs Follow-up</option>
         </select></div>
       <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Next Service Date</label>
@@ -897,9 +935,21 @@ function drawPanel() {
         ${u.serviceHistory && u.serviceHistory.length
           ? `<div>${[...u.serviceHistory].reverse().map(e=>`
               <div class="hist-item">
-                <div style="font-size:11px;font-weight:700;color:#C4A26A;margin-bottom:2px">${fmtDate(e.date)}</div>
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px">
+                  <div style="font-size:11px;font-weight:700;color:#C4A26A">${fmtDate(e.date)}</div>
+                  ${e.serviceType ? `<span style="font-size:9px;background:#182212;border:1px solid #253A1A;color:#7A8C6A;padding:1px 6px;border-radius:10px">${escHtml(e.serviceType)}</span>` : ''}
+                </div>
                 <div style="font-size:13px;color:#DDD5B8;margin-bottom:4px">${escHtml(e.action)}</div>
-                <div style="font-size:11px;color:#7A8C6A">🔧 ${escHtml(e.tech||'Unknown')}</div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:#7A8C6A;margin-bottom:${(e.materials&&e.materials.length)||(e.nextNotes)?'8':'0'}px">
+                  <span>🔧 ${escHtml(e.tech||'Unknown')}</span>
+                  ${e.hours ? `<span>⏱ ${e.hours}h</span>` : ''}
+                  ${e.repairCat ? `<span>🏷 ${escHtml(e.repairCat)}</span>` : ''}
+                </div>
+                ${e.materials && e.materials.length ? `<div style="background:#0D1509;border:1px solid #1C2D16;border-radius:6px;padding:6px 8px;margin-bottom:4px">
+                  <div style="font-size:9px;color:#4D5C3D;font-weight:700;letter-spacing:.04em;margin-bottom:4px">MATERIALS</div>
+                  ${e.materials.map(m=>`<div style="font-size:11px;color:#B8C9A0">· ${escHtml(m.name)} — ${m.qty} ${escHtml(m.unit)}</div>`).join('')}
+                </div>` : ''}
+                ${e.nextNotes ? `<div style="font-size:11px;color:#C4A26A;font-style:italic;border-left:2px solid #C4A26A;padding-left:6px">📌 Next visit: ${escHtml(e.nextNotes)}</div>` : ''}
               </div>`).join('')}</div>`
           : `<div style="text-align:center;padding:32px 16px;color:#4D5C3D">
                <div style="font-size:32px;margin-bottom:8px">🔧</div>
@@ -1484,24 +1534,43 @@ function openLogModal() {
   document.getElementById('logUnitLabel').textContent = '#' + selectedId;
   document.getElementById('logDate').value = toISO(new Date());
   document.getElementById('logTech').value = '';
+  document.getElementById('logHours').value = '';
+  document.getElementById('logServiceType').value = '';
+  document.getElementById('logRepairCatWrap').style.display = 'none';
+  document.getElementById('logRepairCategory').value = '';
   document.getElementById('logAction').value = '';
+  document.getElementById('logNextNotes').value = '';
   document.getElementById('logStatus').value = 'good';
   document.getElementById('logNext').value = '';
+  // Reset materials list
+  _logMaterialCount = 0;
+  const list = document.getElementById('logMaterialsList');
+  if (list) list.innerHTML = '<div style="text-align:center;font-size:11px;color:#4D5C3D;padding:8px" id="logNoMaterials">No materials added</div>';
   document.getElementById('logModal').style.display = 'flex';
 }
 
 function submitLog() {
-  const date   = document.getElementById('logDate').value;
-  const tech   = document.getElementById('logTech').value;
-  const action = document.getElementById('logAction').value.trim();
-  const status = document.getElementById('logStatus').value;
-  const next   = document.getElementById('logNext').value;
+  const date        = document.getElementById('logDate').value;
+  const tech        = document.getElementById('logTech').value;
+  const action      = document.getElementById('logAction').value.trim();
+  const status      = document.getElementById('logStatus').value;
+  const next        = document.getElementById('logNext').value;
+  const hours       = parseFloat(document.getElementById('logHours')?.value) || 0;
+  const serviceType = document.getElementById('logServiceType')?.value || '';
+  const repairCat   = document.getElementById('logRepairCategory')?.value || '';
+  const nextNotes   = document.getElementById('logNextNotes')?.value?.trim() || '';
+  const materials   = collectLogMaterials();
   if (!date || !action) { showToast('⚠️', 'Date and description are required'); return; }
   const u = DATA[selectedId];
   if (!u.serviceHistory) u.serviceHistory = [];
-  u.serviceHistory.push({ date, action, tech: tech || 'Avant Dev Group' });
+  u.serviceHistory.push({
+    date, action, tech: tech || 'Avant Dev Group',
+    hours, serviceType, repairCat, nextNotes, materials
+  });
   u.lastService = date;
   if (next) u.nextService = next;
+  // Update tech notes with next visit notes if provided
+  if (nextNotes) u.techNotes = nextNotes;
   u.status = status;
   persist();
   closeModal('logModal');
@@ -1568,6 +1637,62 @@ function sendText() {
 }
 
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+function logToggleRepair(val) {
+  const w = document.getElementById('logRepairCatWrap');
+  if (w) w.style.display = val === 'Repair' ? 'block' : 'none';
+}
+
+let _logMaterialCount = 0;
+function addLogMaterial() {
+  const list = document.getElementById('logMaterialsList');
+  const noMat = document.getElementById('logNoMaterials');
+  if (noMat) noMat.style.display = 'none';
+  const i = _logMaterialCount++;
+  const row = document.createElement('div');
+  row.id = 'mat_row_' + i;
+  row.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:4px;align-items:center';
+  row.innerHTML = `
+    <select id="mat_name_${i}" style="font-size:11px;padding:5px 6px">
+      <option value="">— Material —</option>
+      <option value="Refrigerant R-410A">Refrigerant R-410A</option>
+      <option value="Refrigerant R-32">Refrigerant R-32</option>
+      <option value="Nitrogen">Nitrogen</option>
+      <option value="PVC Pipe">PVC Pipe</option>
+      <option value="PVC Fittings">PVC Fittings</option>
+      <option value="Condensate Drain Line">Condensate Drain Line</option>
+      <option value="Electrical Wire">Electrical Wire</option>
+      <option value="Capacitor">Capacitor</option>
+      <option value="Contactor">Contactor</option>
+      <option value="Filter">Filter</option>
+      <option value="Insulation / Tape">Insulation / Tape</option>
+      <option value="Refrigerant Line Set">Refrigerant Line Set</option>
+      <option value="Other">Other</option>
+    </select>
+    <input id="mat_qty_${i}" type="number" min="0" step="0.1" placeholder="Qty" style="font-size:11px;padding:5px 6px">
+    <select id="mat_unit_${i}" style="font-size:11px;padding:5px 6px">
+      <option value="lbs">lbs</option>
+      <option value="oz">oz</option>
+      <option value="cu ft">cu ft</option>
+      <option value="ft">ft</option>
+      <option value="ea">ea</option>
+      <option value="in">in</option>
+    </select>
+    <button type="button" onclick="document.getElementById('mat_row_${i}').remove()" style="background:none;border:none;color:#F5A5A0;cursor:pointer;font-weight:800;font-size:14px;padding:0 4px">✕</button>`;
+  list.appendChild(row);
+}
+
+function collectLogMaterials() {
+  const mats = [];
+  document.querySelectorAll('[id^="mat_row_"]').forEach(row => {
+    const i = row.id.replace('mat_row_','');
+    const name = document.getElementById('mat_name_'+i)?.value;
+    const qty  = document.getElementById('mat_qty_'+i)?.value;
+    const unit = document.getElementById('mat_unit_'+i)?.value;
+    if (name && qty) mats.push({ name, qty: parseFloat(qty), unit: unit||'ea' });
+  });
+  return mats;
+}
 
 document.addEventListener('input', e => {
   if (e.target.id === 'textMsg') {
