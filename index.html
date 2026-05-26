@@ -475,6 +475,7 @@ async function init() {
           if (!d.repairCategory) d.repairCategory = '';
           if (!d.mainPhotoUrl) d.mainPhotoUrl = '';
           if (!d.mainPhotoName) d.mainPhotoName = '';
+          if (!d.techNotes) d.techNotes = '';
           DATA[doc.id] = d;
         });
         localStorage.setItem('gota_hvac_v2', JSON.stringify(DATA));
@@ -521,6 +522,7 @@ function buildDefaults() {
       contractorEmail:'', contractorLicense:'', contractorNotes:'',
       nextServiceType:'', repairCategory:'',
       mainPhotoUrl:'', mainPhotoName:'',
+      techNotes:'',
       ownerName:'', ownerPhone:'', ownerEmail:'', notes:'', photos:[], serviceHistory:[]
     };
   }))));
@@ -848,9 +850,12 @@ function drawPanel() {
             <button onclick="setStatus('not_ready')" class="btn ${u.status==='not_ready'?'btn-tan':'btn-gray'}" style="font-size:10px;border-style:dashed">🚧 Not Ready</button>
           </div>
         </div>
-        <div style="font-size:10px;font-weight:800;color:#4D5C3D;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px">Notes &amp; Reminders</div>
-        <textarea id="notesTA" rows="6" placeholder="Add notes, reminders, special instructions…" style="resize:vertical;font-size:13px">${escHtml(u.notes||'')}</textarea>
+        <div style="font-size:10px;font-weight:800;color:#4D5C3D;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px">Owner Notes &amp; Reminders</div>
+        <textarea id="notesTA" rows="4" placeholder="Owner preferences, gate codes, special instructions…" style="resize:vertical;font-size:13px">${escHtml(u.notes||'')}</textarea>
         <button class="btn btn-gray" style="margin-top:8px;width:100%;font-size:12px" onclick="saveNotes()">💾 Save Notes</button>
+        <div style="margin-top:14px;font-size:10px;font-weight:800;color:#4D5C3D;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px">🔧 Tech Field Notes</div>
+        <textarea id="techNotesTA" rows="4" placeholder="Equipment quirks, next visit tasks, things to check, material notes…" style="resize:vertical;font-size:13px">${escHtml(u.techNotes||'')}</textarea>
+        <button class="btn btn-gray" style="margin-top:8px;width:100%;font-size:12px" onclick="saveTechNotes()">💾 Save Tech Notes</button>
       </div>
 
       <!-- HVAC SYSTEM -->
@@ -1244,6 +1249,14 @@ function saveNotes() {
   DATA[selectedId].notes = ta.value;
   persist();
   showToast('💾', 'Notes saved');
+}
+
+function saveTechNotes() {
+  const ta = document.getElementById('techNotesTA');
+  if (!ta) return;
+  DATA[selectedId].techNotes = ta.value;
+  persist();
+  showToast('💾', 'Tech notes saved');
 }
 
 function updateServiceType(val) {
