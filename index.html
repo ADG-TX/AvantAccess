@@ -18,6 +18,7 @@
     .unit-due       {background:#78350f;border-color:#f59e0b;color:#fde68a}
     .unit-overdue   {background:#5C1209;border-color:#C0392B;color:#F5A5A0}
     .unit-unconfigured{background:#111A0D;border-color:#253A1A;color:#7A8C6A}
+    .unit-not_ready  {background:#0D1509;border-color:#4D5C3D;color:#4D5C3D}
     .unit-selected  {outline:2px solid #C4A26A;outline-offset:2px}
     .unit-dimmed    {opacity:.18;pointer-events:none}
 
@@ -136,9 +137,10 @@
     <!-- Status filter -->
     <select id="statusFilter" onchange="handleFilter(this.value)" style="width:auto;font-size:12px;padding:7px 10px;flex-shrink:0">
       <option value="all">All Status</option>
-      <option value="good">✅ Good</option>
-      <option value="due">⚠️ Due Soon</option>
+      <option value="good">✅ Done</option>
+      <option value="due">🟡 Work on Soon</option>
       <option value="overdue">🔴 Overdue</option>
+      <option value="not_ready">🚧 Not Ready</option>
       <option value="unconfigured">⬜ Unconfigured</option>
     </select>
 
@@ -200,9 +202,10 @@
     <!-- Legend -->
     <div style="display:flex;gap:16px;margin-top:14px;padding:10px 14px;background:#0D1509;border:1px solid #1C2D16;border-radius:8px;width:fit-content;flex-wrap:wrap">
       <span style="font-size:10px;font-weight:700;color:#7A8C6A;letter-spacing:.06em;text-transform:uppercase;align-self:center">Legend:</span>
-      <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#B8C9A0"><div style="width:18px;height:12px;border-radius:3px;background:#1A3B0E;border:1px solid #4A8C2A"></div>Good</div>
-      <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#B8C9A0"><div style="width:18px;height:12px;border-radius:3px;background:#78350f;border:1px solid #f59e0b"></div>Due Soon</div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#B8C9A0"><div style="width:18px;height:12px;border-radius:3px;background:#1A3B0E;border:1px solid #4A8C2A"></div>Done</div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#B8C9A0"><div style="width:18px;height:12px;border-radius:3px;background:#78350f;border:1px solid #f59e0b"></div>Work on Soon</div>
       <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#B8C9A0"><div style="width:18px;height:12px;border-radius:3px;background:#5C1209;border:1px solid #C0392B"></div>Overdue</div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#B8C9A0"><div style="width:18px;height:12px;border-radius:3px;background:#0D1509;border:1px dashed #4D5C3D"></div>Not Ready</div>
       <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#B8C9A0"><div style="width:18px;height:12px;border-radius:3px;background:#111A0D;border:1px solid #253A1A"></div>Unconfigured</div>
     </div>
   </div>
@@ -468,6 +471,10 @@ async function init() {
           if (!d.contractorEmail) d.contractorEmail = '';
           if (!d.contractorLicense) d.contractorLicense = '';
           if (!d.contractorNotes) d.contractorNotes = '';
+          if (!d.nextServiceType) d.nextServiceType = '';
+          if (!d.repairCategory) d.repairCategory = '';
+          if (!d.mainPhotoUrl) d.mainPhotoUrl = '';
+          if (!d.mainPhotoName) d.mainPhotoName = '';
           DATA[doc.id] = d;
         });
         localStorage.setItem('gota_hvac_v2', JSON.stringify(DATA));
@@ -512,6 +519,8 @@ function buildDefaults() {
       hasContractor: false,
       contractorName:'', contractorCompany:'', contractorPhone:'',
       contractorEmail:'', contractorLicense:'', contractorNotes:'',
+      nextServiceType:'', repairCategory:'',
+      mainPhotoUrl:'', mainPhotoName:'',
       ownerName:'', ownerPhone:'', ownerEmail:'', notes:'', photos:[], serviceHistory:[]
     };
   }))));
@@ -793,10 +802,11 @@ function drawPanel() {
         </div>
         <div style="background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:12px;margin-bottom:16px">
           <div style="font-size:10px;color:#7A8C6A;margin-bottom:8px;font-weight:700">Change Status</div>
-          <div style="display:flex;gap:6px">
-            <button onclick="setStatus('good')" class="btn ${u.status==='good'?'btn-green':'btn-gray'}" style="flex:1;font-size:11px">✅ Good</button>
-            <button onclick="setStatus('due')" class="btn ${u.status==='due'?'btn-amber':'btn-gray'}" style="flex:1;font-size:11px">⚠️ Due</button>
-            <button onclick="setStatus('overdue')" class="btn ${u.status==='overdue'?'btn-red':'btn-gray'}" style="flex:1;font-size:11px">🔴 Overdue</button>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <button onclick="setStatus('good')" class="btn ${u.status==='good'?'btn-green':'btn-gray'}" style="font-size:10px">✅ Done</button>
+            <button onclick="setStatus('due')" class="btn ${u.status==='due'?'btn-amber':'btn-gray'}" style="font-size:10px">🟡 Work on Soon</button>
+            <button onclick="setStatus('overdue')" class="btn ${u.status==='overdue'?'btn-red':'btn-gray'}" style="font-size:10px">🔴 Overdue</button>
+            <button onclick="setStatus('not_ready')" class="btn ${u.status==='not_ready'?'btn-tan':'btn-gray'}" style="font-size:10px;border-style:dashed">🚧 Not Ready</button>
           </div>
         </div>
         <div style="font-size:10px;font-weight:800;color:#4D5C3D;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px">Notes &amp; Reminders</div>
@@ -1533,9 +1543,10 @@ function setView(v) {
 // ════════════════════════════════════════════════════════════
 function badge(s) {
   const map = {
-    good:         ['#1A3B0E','#4A8C2A','#A8D878','✅ Good'],
-    due:          ['#78350f','#f59e0b','#fde68a','⚠️ Due Soon'],
+    good:         ['#1A3B0E','#4A8C2A','#A8D878','✅ Done'],
+    due:          ['#78350f','#f59e0b','#fde68a','🟡 Work on Soon'],
     overdue:      ['#5C1209','#C0392B','#F5A5A0','🔴 Overdue'],
+    not_ready:    ['#0D1509','#4D5C3D','#4D5C3D','🚧 Not Ready'],
     unconfigured: ['#111A0D','#253A1A','#7A8C6A','⬜ Unconfigured'],
   };
   const [bg,bc,tc,lbl] = map[s]||map.unconfigured;
