@@ -9,16 +9,16 @@
        Red:    #C0392B  |  Cream text:   #F5EDD8
     ──────────────────────────────────────────────────────────────── */
     *{box-sizing:border-box;margin:0;padding:0}
-    body{background:#070B04;color:#F5EDD8;font-family:'Inter',system-ui,sans-serif;overflow-x:hidden}
+    body{background:transparent;color:#F5EDD8;font-family:'Inter',system-ui,sans-serif;overflow-x:hidden}
 
     /* ── Unit cells ── */
     .unit-cell{display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;cursor:pointer;border-radius:4px;border:1px solid;transition:transform .12s,box-shadow .12s;user-select:none;letter-spacing:.01em}
     .unit-cell:hover{transform:scale(1.12);z-index:20;position:relative;box-shadow:0 0 0 2px #C4A26A}
-    .unit-good      {background:#1A3B0E;border-color:#4A8C2A;color:#A8D878}
-    .unit-due       {background:#78350f;border-color:#f59e0b;color:#fde68a}
-    .unit-overdue   {background:#5C1209;border-color:#C0392B;color:#F5A5A0}
-    .unit-unconfigured{background:#111A0D;border-color:#253A1A;color:#7A8C6A}
-    .unit-not_ready  {background:#0D1509;border-color:#4D5C3D;color:#4D5C3D}
+    .unit-good      {background:rgba(26,59,14,0.92);border-color:#4A8C2A;color:#A8D878;box-shadow:0 1px 4px rgba(74,140,42,.18)}
+    .unit-due       {background:rgba(120,53,15,0.92);border-color:#f59e0b;color:#fde68a;box-shadow:0 1px 4px rgba(245,158,11,.18)}
+    .unit-overdue   {background:rgba(92,18,9,0.92);border-color:#C0392B;color:#F5A5A0;box-shadow:0 1px 4px rgba(192,57,43,.18)}
+    .unit-unconfigured{background:rgba(17,26,13,0.88);border-color:#253A1A;color:#7A8C6A}
+    .unit-not_ready  {background:rgba(13,21,9,0.80);border-color:#4D5C3D;color:#4D5C3D}
     .unit-selected  {outline:2px solid #C4A26A;outline-offset:2px}
     .unit-dimmed    {opacity:.18;pointer-events:none}
 
@@ -66,11 +66,11 @@
     .hist-item:last-child{padding-bottom:0;border-left-color:transparent}
 
     /* ── Stat cards ── */
-    .stat-card{background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:10px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+    .stat-card{background:rgba(13,21,9,0.78);border:1px solid rgba(44,74,30,0.7);border-radius:8px;padding:10px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 
     /* ── Map building groups ── */
     .map-strip{display:flex;flex-direction:column;gap:10px}
-    .bldg-group{background:#0D1509;border:1px solid #1C2D16;border-radius:6px;padding:8px 7px}
+    .bldg-group{background:rgba(10,16,7,0.78);border:1px solid rgba(28,45,22,0.8);border-radius:6px;padding:8px 7px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
     .bldg-label{font-size:9px;font-weight:800;color:#4D5C3D;text-transform:uppercase;letter-spacing:.08em;text-align:center;margin-bottom:5px}
     .units-grid{display:flex;flex-direction:column;gap:3px}
     .unit-row{display:flex;gap:3px}
@@ -105,12 +105,18 @@
     #lightbox img{max-width:90vw;max-height:82vh;border-radius:8px;object-fit:contain;box-shadow:0 20px 60px rgba(0,0,0,.6)}
     #lightboxCaption{font-size:12px;color:#A8D878}
 
-    /* ── Page background photo ── */
+    /* ── Page background layers ── */
+    /* Layer -2: full photo */
     body::before{
+      content:'';position:fixed;inset:0;z-index:-2;
+      background:url('GOTA%20INSIDE%20SHOT.png') center/cover fixed;
+      pointer-events:none
+    }
+    /* Layer -1: dark green tint overlay so UI stays readable */
+    body::after{
       content:'';position:fixed;inset:0;z-index:-1;
-      background-image:url('GOTA%20INSIDE%20SHOT.png');
-      background-size:cover;background-position:center;background-attachment:fixed;
-      opacity:.12;pointer-events:none
+      background:rgba(4,7,2,0.72);
+      pointer-events:none
     }
 
     /* ── Welcome panel ── */
@@ -118,7 +124,19 @@
       flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
       overflow:hidden;position:relative
     }
-    #welcomeHero{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;opacity:.45}
+    #welcomeHero{
+      width:100%;height:100%;object-fit:cover;position:absolute;inset:0;
+      opacity:.82;
+      /* subtle enhancement */
+      filter:contrast(1.06) saturate(1.08) brightness(1.05)
+    }
+    /* gradient fade at edges for blending */
+    #welcomePanel::after{
+      content:'';position:absolute;inset:0;z-index:0;
+      background:linear-gradient(to right, rgba(4,7,2,0.55) 0%, transparent 20%, transparent 80%, rgba(4,7,2,0.55) 100%),
+                 linear-gradient(to bottom, rgba(4,7,2,0.3) 0%, transparent 15%, transparent 75%, rgba(4,7,2,0.7) 100%);
+      pointer-events:none
+    }
     #welcomeOverlay{
       position:relative;z-index:1;display:flex;flex-direction:column;
       align-items:center;justify-content:center;height:100%;gap:16px;padding:32px 24px;text-align:center
@@ -130,7 +148,7 @@
 <!-- ═══════════════════════════════════════════════
      HEADER
 ═══════════════════════════════════════════════ -->
-<header style="background:#090E07;border-bottom:1px solid #1C2D16;position:sticky;top:0;z-index:30">
+<header style="background:rgba(6,10,4,0.88);border-bottom:1px solid rgba(44,74,30,0.6);position:sticky;top:0;z-index:30;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)">
   <div style="padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
     <!-- Brand -->
     <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
@@ -177,7 +195,7 @@
 <!-- ═══════════════════════════════════════════════
      STATS BAR
 ═══════════════════════════════════════════════ -->
-<div style="background:#090E07;border-bottom:1px solid #1C2D16;padding:8px 16px">
+<div style="background:rgba(5,8,3,0.82);border-bottom:1px solid rgba(44,74,30,0.5);padding:8px 16px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)">
   <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;align-items:center">
     <div class="stat-card">
       <span style="font-size:22px;font-weight:800;color:#F5EDD8" id="statTotal">152</span>
@@ -251,7 +269,7 @@
   <div id="welcomePanel">
     <img id="welcomeHero" src="GOTA%20PHOTOS.png" alt="Garages of the Americas" onerror="this.style.display='none'">
     <div id="welcomeOverlay">
-      <div style="background:rgba(7,11,4,.65);border:1px solid #2D5A1B;border-radius:16px;padding:28px 32px;max-width:420px;backdrop-filter:blur(4px)">
+      <div style="background:rgba(4,8,2,0.52);border:1px solid rgba(74,140,42,0.45);border-radius:16px;padding:28px 32px;max-width:420px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 8px 48px rgba(0,0,0,0.6),inset 0 1px 0 rgba(168,216,120,0.08)">
         <div style="font-size:11px;font-weight:800;color:#C4A26A;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px">Garages of the Americas</div>
         <div style="font-size:26px;font-weight:900;color:#F5EDD8;line-height:1.2;margin-bottom:8px">GOTA HVAC<br>Management</div>
         <div style="font-size:12px;color:#7A8C6A;margin-bottom:20px;line-height:1.6">152 units · Austin, TX<br>Select any unit on the map to view details, log service, or schedule work.</div>
@@ -275,7 +293,7 @@
   </div>
 
   <!-- ── DETAIL PANEL ── -->
-  <div id="detailPanel" style="width:430px;flex-shrink:0;border-left:1px solid #1C2D16;background:#090E07;overflow-y:auto;display:none"></div>
+  <div id="detailPanel" style="width:430px;flex-shrink:0;border-left:1px solid rgba(44,74,30,0.5);background:rgba(6,10,4,0.90);overflow-y:auto;display:none;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)"></div>
 </div>
 
 <!-- ═══════════════════════════════════════════════
@@ -886,7 +904,7 @@ function drawPanel() {
            <span style="font-size:11px;color:#4D5C3D;font-weight:600">No main photo — open Photos tab to set one</span>
          </div>`}
     <!-- Sticky Header -->
-    <div style="position:sticky;top:0;background:#090E07;border-bottom:1px solid #1C2D16;z-index:10;padding:14px 16px 0">
+    <div style="position:sticky;top:0;background:rgba(6,10,4,0.95);border-bottom:1px solid rgba(44,74,30,0.5);z-index:10;padding:14px 16px 0;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
         <div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
