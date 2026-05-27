@@ -12,6 +12,12 @@ service firebase.storage {
                    && request.resource.contentType.matches('image/.*'); // images only
     }
 
+    // ── GOTA HVAC voice recordings ────────────────────────────────
+    match /units/{unitId}/recordings/{filename} {
+      allow read:  if true;
+      allow write: if request.resource.size < 300 * 1024 * 1024;
+    }
+
     // ── AvantAccess customer design uploads ───────────────────────
     match /designs/{filename} {
       allow read:  if true;
