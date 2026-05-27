@@ -100,6 +100,11 @@
     .photo-del-btn{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.72);border:none;color:#F08080;cursor:pointer;padding:3px 7px;border-radius:4px;font-size:11px;font-weight:800;line-height:1;transition:background .15s}
     .photo-del-btn:hover{background:rgba(80,14,8,.9)}
 
+    /* ── Recording pulse animation ── */
+    @keyframes recPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.35)}}
+    @keyframes recRing{0%{box-shadow:0 0 0 0 rgba(192,57,43,.6)}70%{box-shadow:0 0 0 8px rgba(192,57,43,0)}100%{box-shadow:0 0 0 0 rgba(192,57,43,0)}}
+    .rec-dot{width:11px;height:11px;border-radius:50%;background:#C0392B;animation:recPulse .9s ease-in-out infinite,recRing 1.4s ease-out infinite;flex-shrink:0}
+
     /* ── Lightbox ── */
     #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:200;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;cursor:pointer}
     #lightbox.open{display:flex}
@@ -610,6 +615,7 @@ async function init() {
           if (!d.mainPhotoName) d.mainPhotoName = '';
           if (!d.techNotes) d.techNotes = '';
           if (!d.scheduledWork) d.scheduledWork = [];
+          if (!d.recordings) d.recordings = [];
           DATA[doc.id] = d;
         });
         localStorage.setItem('gota_hvac_v2', JSON.stringify(DATA));
@@ -657,7 +663,7 @@ function buildDefaults() {
       nextServiceType:'', repairCategory:'',
       mainPhotoUrl:'', mainPhotoName:'',
       techNotes:'',
-      ownerName:'', ownerPhone:'', ownerEmail:'', notes:'', photos:[], serviceHistory:[], scheduledWork:[]
+      ownerName:'', ownerPhone:'', ownerEmail:'', notes:'', photos:[], serviceHistory:[], scheduledWork:[], recordings:[]
     };
   }))));
   Object.entries(SAMPLES).forEach(([id, d]) => { if (DATA[id]) Object.assign(DATA[id], d); });
@@ -936,6 +942,7 @@ function drawPanel() {
         <button class="tab-btn ${activeTab==='photos'?'active':''}" id="tb-photos" onclick="switchTab('photos')">📷 Photos${photoCount ? ' ('+photoCount+')' : ''}</button>
         <button class="tab-btn ${activeTab==='contractor'?'active':''}" id="tb-contractor" onclick="switchTab('contractor')">🏗 Contractor</button>
         <button class="tab-btn ${activeTab==='schedule'?'active':''}" id="tb-schedule" onclick="switchTab('schedule')">📅 Schedule${(()=>{const p=(u.scheduledWork||[]).filter(i=>i.status!=='completed'&&i.status!=='cancelled').length;return p?' ('+p+')':'';})()}</button>
+        <button class="tab-btn ${activeTab==='recordings'?'active':''}" id="tb-recordings" onclick="switchTab('recordings')">🎙 Recordings${(u.recordings||[]).length?' ('+(u.recordings.length)+')':''}</button>
       </div>
     </div>
 
@@ -1056,6 +1063,11 @@ function drawPanel() {
       <!-- SCHEDULE -->
       <div class="tab-content ${activeTab==='schedule'?'active':''}" id="tc-schedule">
         ${scheduleTabHtml(u)}
+      </div>
+
+      <!-- RECORDINGS -->
+      <div class="tab-content ${activeTab==='recordings'?'active':''}" id="tc-recordings">
+        ${recordingsTabHtml(u)}
       </div>
 
     </div>`;
@@ -2105,6 +2117,233 @@ document.addEventListener('keydown', e => {
     else if (selectedId) closePanel();
   }
 });
+
+// ════════════════════════════════════════════════════════════
+// VOICE RECORDINGS
+// ════════════════════════════════════════════════════════════
+let activeRecording = false;
+let recStream = null;
+let recMediaRecorder = null;
+let recChunks = [];
+let recSpeechRec = null;
+let recTranscript = '';
+let recStartTime = null;
+let recTimerInterval = null;
+let recSavedLabel = '';
+
+function recordingsTabHtml(u) {
+  const recs = (u.recordings || []).slice().reverse();
+  const origRecs = u.recordings || [];
+
+  if (activeRecording) {
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div style="font-size:10px;font-weight:800;color:#C0392B;letter-spacing:.08em;text-transform:uppercase;display:flex;align-items:center;gap:8px">
+          <div class="rec-dot"></div> RECORDING IN PROGRESS
+        </div>
+        <span id="recTimer" style="font-size:18px;font-weight:800;color:#F5EDD8;font-variant-numeric:tabular-nums;letter-spacing:.06em">00:00</span>
+      </div>
+      <div style="background:rgba(80,14,8,0.40);border:1px solid rgba(192,57,43,0.35);border-radius:10px;padding:14px;margin-bottom:16px">
+        <div style="font-size:10px;font-weight:700;color:#C0392B;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Live Transcript</div>
+        <div id="recLiveTranscript" style="font-size:12px;color:#DDD5B8;line-height:1.6;min-height:60px;max-height:180px;overflow-y:auto;white-space:pre-wrap">(listening…)</div>
+      </div>
+      <button class="btn btn-red" style="width:100%;font-size:14px;padding:11px" onclick="stopRecording()">⏹ Stop &amp; Save Recording</button>`;
+  }
+
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:10px;font-weight:800;color:#4D5C3D;letter-spacing:.08em;text-transform:uppercase">Conversation Recordings</div>
+      <span style="font-size:11px;color:#7A8C6A">${origRecs.length} saved</span>
+    </div>
+    <div style="background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:14px;margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:#DDD5B8;margin-bottom:10px">Record a new conversation</div>
+      <input id="recLabel" type="text" placeholder="Label (e.g. Design call with owner)" style="margin-bottom:10px">
+      <button class="btn btn-red" style="width:100%;font-size:13px;padding:10px" onclick="startRecording()">🎙 Start Recording</button>
+    </div>
+    ${origRecs.length === 0
+      ? `<div style="text-align:center;padding:28px 16px;color:#4D5C3D">
+           <div style="font-size:32px;margin-bottom:8px">🎙</div>
+           <div style="font-size:14px;font-weight:600;color:#7A8C6A">No recordings yet</div>
+           <div style="font-size:12px;margin-top:4px">Tap Start Recording to capture conversations with owners or contractors.</div>
+         </div>`
+      : `<div style="display:flex;flex-direction:column;gap:10px">
+           ${recs.map((r, i) => recordingCard(r, origRecs.length - 1 - i)).join('')}
+         </div>`}`;
+}
+
+function recordingCard(r, idx) {
+  const durStr = r.duration ? fmtRecDuration(r.duration) : '';
+  const hasT = r.transcript && r.transcript.trim().length > 0;
+  const preview = hasT ? r.transcript.slice(0, 220) + (r.transcript.length > 220 ? '…' : '') : '';
+  return `
+    <div style="background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:#DDD5B8">${escHtml(r.label||'Recording')}</div>
+          <div style="font-size:11px;color:#7A8C6A;margin-top:2px">${fmtDate(r.date)}${durStr ? ' · ' + durStr : ''}</div>
+        </div>
+        <button onclick="deleteRecording(${idx})" style="background:none;border:none;color:#F08080;cursor:pointer;font-size:16px;padding:0 0 0 8px;line-height:1" title="Delete">🗑</button>
+      </div>
+      ${r.url ? `<audio controls style="width:100%;height:36px;margin-bottom:8px" src="${escAttr(r.url)}"></audio>` : ''}
+      ${hasT
+        ? `<div style="background:#07090F;border:1px solid #1E2840;border-radius:6px;padding:10px;font-size:11px;color:#B8C9A0;line-height:1.6;max-height:90px;overflow-y:auto">${escHtml(preview)}</div>
+           ${r.transcript.length > 220
+             ? `<button class="btn btn-gray" style="margin-top:6px;font-size:10px;width:100%" onclick="showFullTranscript(${idx})">View Full Transcript</button>`
+             : ''}`
+        : `<div style="font-size:11px;color:#4D5C3D;font-style:italic">No transcript available</div>`}
+    </div>`;
+}
+
+function fmtRecDuration(secs) {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function showFullTranscript(idx) {
+  if (!selectedId) return;
+  const r = (DATA[selectedId].recordings || [])[idx];
+  if (!r) return;
+  const modal = document.getElementById('logModal');
+  modal.innerHTML = `
+    <div class="modal-wrap" onclick="if(event.target===this)closeModal('logModal')">
+      <div class="modal-box">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div style="font-size:14px;font-weight:700;color:#DDD5B8">Full Transcript</div>
+          <button onclick="closeModal('logModal')" style="background:none;border:none;color:#7A8C6A;cursor:pointer;font-size:20px;line-height:1">✕</button>
+        </div>
+        <div style="font-size:10px;color:#7A8C6A;margin-bottom:12px">${escHtml(r.label||'Recording')} · ${fmtDate(r.date)}</div>
+        <div style="font-size:12px;color:#DDD5B8;line-height:1.7;max-height:60vh;overflow-y:auto;white-space:pre-wrap">${escHtml(r.transcript)}</div>
+      </div>
+    </div>`;
+  modal.style.display = 'block';
+}
+
+async function startRecording() {
+  if (!selectedId) return;
+  if (!navigator.mediaDevices) { showToast('⚠️', 'Microphone not supported in this browser.'); return; }
+  try {
+    recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recChunks = [];
+    recTranscript = '';
+    recStartTime = Date.now();
+    recSavedLabel = document.getElementById('recLabel')?.value?.trim() || '';
+
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+                   : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+    recMediaRecorder = new MediaRecorder(recStream, mimeType ? { mimeType } : {});
+    recMediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) recChunks.push(e.data); };
+    recMediaRecorder.start(5000);
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SR) {
+      recSpeechRec = new SR();
+      recSpeechRec.continuous = true;
+      recSpeechRec.interimResults = true;
+      recSpeechRec.lang = 'en-US';
+      recSpeechRec.onresult = e => {
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) recTranscript += e.results[i][0].transcript + ' ';
+        }
+        const el = document.getElementById('recLiveTranscript');
+        if (el) el.textContent = recTranscript || '(listening…)';
+      };
+      // Auto-restart keeps transcription going for 20+ min sessions
+      recSpeechRec.onend = () => {
+        if (recMediaRecorder && recMediaRecorder.state === 'recording') {
+          try { recSpeechRec.start(); } catch(ignored) {}
+        }
+      };
+      try { recSpeechRec.start(); } catch(ignored) {}
+    }
+
+    recTimerInterval = setInterval(() => {
+      const el = document.getElementById('recTimer');
+      if (!el) return;
+      const secs = Math.floor((Date.now() - recStartTime) / 1000);
+      el.textContent = String(Math.floor(secs/60)).padStart(2,'0') + ':' + String(secs%60).padStart(2,'0');
+    }, 1000);
+
+    activeRecording = true;
+    drawPanel();
+    switchTab('recordings');
+  } catch(err) {
+    showToast('🎙', 'Microphone access denied — allow it in browser settings.');
+  }
+}
+
+function stopRecording() {
+  if (recSpeechRec) {
+    recSpeechRec.onend = null;
+    try { recSpeechRec.stop(); } catch(ignored) {}
+    recSpeechRec = null;
+  }
+  if (recTimerInterval) { clearInterval(recTimerInterval); recTimerInterval = null; }
+  if (recMediaRecorder && recMediaRecorder.state !== 'inactive') {
+    recMediaRecorder.onstop = () => saveRecording();
+    recMediaRecorder.stop();
+  } else {
+    saveRecording();
+  }
+}
+
+async function saveRecording() {
+  if (!selectedId) return;
+  const u = DATA[selectedId];
+  const mimeType = recMediaRecorder?.mimeType || 'audio/webm';
+  const blob = new Blob(recChunks, { type: mimeType });
+  const durationSecs = recStartTime ? Math.round((Date.now() - recStartTime) / 1000) : 0;
+  const timestamp = Date.now();
+  const label = recSavedLabel || new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  const finalTranscript = recTranscript.trim();
+
+  recChunks = []; recTranscript = ''; recMediaRecorder = null; recStartTime = null;
+  activeRecording = false;
+  if (recStream) { recStream.getTracks().forEach(t => t.stop()); recStream = null; }
+  if (!u.recordings) u.recordings = [];
+
+  if (firebaseReady) {
+    try {
+      showToast('⬆️', 'Saving recording…');
+      const ext = mimeType.includes('webm') ? 'webm' : 'ogg';
+      const path = `units/${selectedId}/recordings/${timestamp}.${ext}`;
+      const ref = firebase.storage().ref(path);
+      await ref.put(blob);
+      const url = await ref.getDownloadURL();
+      u.recordings.push({ url, path, label, transcript: finalTranscript, date: new Date().toISOString().split('T')[0], duration: durationSecs });
+      await persist();
+      showToast('🎙', 'Recording saved!');
+    } catch(err) {
+      const url = URL.createObjectURL(blob);
+      u.recordings.push({ url, path: '', label, transcript: finalTranscript, date: new Date().toISOString().split('T')[0], duration: durationSecs });
+      persist();
+      showToast('⚠️', 'Cloud save failed — stored locally for this session.');
+    }
+  } else {
+    const url = URL.createObjectURL(blob);
+    u.recordings.push({ url, path: '', label, transcript: finalTranscript, date: new Date().toISOString().split('T')[0], duration: durationSecs });
+    persist();
+    showToast('🎙', 'Recording saved locally!');
+  }
+
+  drawPanel();
+  switchTab('recordings');
+}
+
+async function deleteRecording(idx) {
+  if (!selectedId) return;
+  const u = DATA[selectedId];
+  if (!u.recordings || !u.recordings[idx]) return;
+  const rec = u.recordings[idx];
+  if (rec.path && firebaseReady) {
+    try { await firebase.storage().ref(rec.path).delete(); } catch(ignored) {}
+  }
+  u.recordings.splice(idx, 1);
+  persist();
+  drawPanel();
+  switchTab('recordings');
+  showToast('🗑', 'Recording deleted');
+}
 
 // ════════════════════════════════════════════════════════════
 // BOOT
