@@ -154,6 +154,30 @@
 <body>
 
 <!-- ═══════════════════════════════════════════════
+     LOGIN GATE — internal dashboard is private
+═══════════════════════════════════════════════ -->
+<div id="loginGate" style="position:fixed;inset:0;z-index:300;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(4,3,2,0.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)">
+  <div style="width:100%;max-width:380px;background:rgba(8,7,5,0.94);border:1px solid rgba(196,162,106,0.30);border-radius:16px;padding:32px 28px;box-shadow:0 24px 70px rgba(0,0,0,.7)">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:22px;text-align:center">
+      <div style="width:48px;height:48px;background:linear-gradient(135deg,#2D5A1B,#C4A26A);border-radius:11px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(196,162,106,.3)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+      </div>
+      <div style="font-size:15px;font-weight:800;color:#C4A26A;letter-spacing:.04em">AVANT DEVELOPMENT GROUP</div>
+      <div style="font-size:11px;color:#7A8C6A">GOTA HVAC Management · Staff Login</div>
+    </div>
+    <form id="loginForm" onsubmit="handleLogin(event)">
+      <label style="font-size:11px;font-weight:700;color:#7A8C6A;letter-spacing:.04em;text-transform:uppercase;display:block;margin-bottom:5px">Email</label>
+      <input id="loginEmail" type="email" autocomplete="username" placeholder="you@example.com" required style="margin-bottom:14px">
+      <label style="font-size:11px;font-weight:700;color:#7A8C6A;letter-spacing:.04em;text-transform:uppercase;display:block;margin-bottom:5px">Password</label>
+      <input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••••" required style="margin-bottom:6px">
+      <div id="loginError" style="font-size:11px;color:#F5A5A0;min-height:16px;margin-bottom:10px"></div>
+      <button id="loginBtn" type="submit" class="btn btn-tan" style="width:100%;font-size:13px;padding:11px">Sign In</button>
+    </form>
+    <div id="loginConfigWarn" style="display:none;margin-top:16px;font-size:10px;color:#7A8C6A;line-height:1.5;background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:10px"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
      HEADER
 ═══════════════════════════════════════════════ -->
 <header style="background:rgba(6,5,3,0.88);border-bottom:1px solid rgba(196,162,106,0.22);position:sticky;top:0;z-index:30;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)">
@@ -197,6 +221,9 @@
 
     <!-- Reset -->
     <button onclick="confirmReset()" class="btn btn-gray" style="font-size:10px;padding:4px 10px;opacity:.5" title="Reset all data">↺ Reset</button>
+
+    <!-- Logout -->
+    <button onclick="handleLogout()" class="btn btn-gray" style="font-size:10px;padding:4px 10px;opacity:.6" title="Sign out"><span id="userBadge" style="margin-right:5px;color:#7A8C6A"></span>⎋ Sign Out</button>
   </div>
 </header>
 
@@ -477,6 +504,7 @@
      FIREBASE (Storage for photo uploads)
 ═══════════════════════════════════════════════ -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
@@ -486,8 +514,12 @@
 // ════════════════════════════════════════════════════════════
 let storage = null;
 let db = null;
+let auth = null;
 let firebaseReady = false;
 let firestoreReady = false;
+let authReady = false;
+let currentUser = null;
+let appBooted = false;
 
 (function initFirebase() {
   try {
@@ -504,6 +536,8 @@ let firestoreReady = false;
     firebaseReady = true;
     db = firebase.firestore();
     firestoreReady = true;
+    auth = firebase.auth();
+    authReady = true;
   } catch(e) {
     console.warn('Firebase init failed:', e);
   }
@@ -2395,8 +2429,74 @@ async function deleteRecording(idx) {
 }
 
 // ════════════════════════════════════════════════════════════
+// AUTH GATE
+// ════════════════════════════════════════════════════════════
+function showLoginGate() {
+  const gate = document.getElementById('loginGate');
+  if (gate) gate.style.display = 'flex';
+}
+function hideLoginGate() {
+  const gate = document.getElementById('loginGate');
+  if (gate) gate.style.display = 'none';
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass  = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  const btn   = document.getElementById('loginBtn');
+  errEl.textContent = '';
+  if (!authReady) { errEl.textContent = 'Auth unavailable — check your connection.'; return; }
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try {
+    await auth.signInWithEmailAndPassword(email, pass);
+    // onAuthStateChanged will boot the app
+  } catch(err) {
+    const map = {
+      'auth/invalid-email': 'That email address looks invalid.',
+      'auth/user-not-found': 'No account found for that email.',
+      'auth/wrong-password': 'Incorrect password.',
+      'auth/invalid-credential': 'Email or password is incorrect.',
+      'auth/too-many-requests': 'Too many attempts — try again in a few minutes.',
+      'auth/network-request-failed': 'Network error — check your connection.',
+      'auth/operation-not-allowed': 'Email/Password sign-in is not enabled in Firebase yet.',
+    };
+    errEl.textContent = map[err.code] || ('Sign-in failed: ' + (err.message || err.code));
+  } finally {
+    btn.disabled = false; btn.textContent = 'Sign In';
+  }
+}
+
+function handleLogout() {
+  if (!authReady) return;
+  if (!confirm('Sign out of the dashboard?')) return;
+  auth.signOut();
+}
+
+// ════════════════════════════════════════════════════════════
 // BOOT
 // ════════════════════════════════════════════════════════════
-init();
+if (authReady) {
+  auth.onAuthStateChanged(user => {
+    currentUser = user;
+    if (user) {
+      hideLoginGate();
+      const badge = document.getElementById('userBadge');
+      if (badge) badge.textContent = user.email || '';
+      if (!appBooted) { appBooted = true; init(); }
+    } else {
+      appBooted = false;
+      showLoginGate();
+    }
+  });
+} else {
+  // Firebase/Auth could not load (e.g. offline) — fall back to local-only mode
+  // so the tool still works on the bench without exposing cloud data.
+  hideLoginGate();
+  const warn = document.getElementById('loginConfigWarn');
+  if (warn) { warn.style.display = 'block'; warn.textContent = 'Offline mode — cloud sync and login are unavailable.'; }
+  init();
+}
 </script>
 </body></html>
