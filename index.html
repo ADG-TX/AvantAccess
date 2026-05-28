@@ -156,25 +156,75 @@
 <!-- ═══════════════════════════════════════════════
      LOGIN GATE — internal dashboard is private
 ═══════════════════════════════════════════════ -->
-<div id="loginGate" style="position:fixed;inset:0;z-index:300;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(4,3,2,0.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)">
-  <div style="width:100%;max-width:380px;background:rgba(8,7,5,0.94);border:1px solid rgba(196,162,106,0.30);border-radius:16px;padding:32px 28px;box-shadow:0 24px 70px rgba(0,0,0,.7)">
-    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:22px;text-align:center">
-      <div style="width:48px;height:48px;background:linear-gradient(135deg,#2D5A1B,#C4A26A);border-radius:11px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(196,162,106,.3)">
-        <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+<div id="loginGate" style="position:fixed;inset:0;z-index:300;display:flex">
+
+  <!-- BG photo layers (same as app) -->
+  <div style="position:absolute;inset:0;z-index:0;background:url('IMG_9065.JPG') center/cover no-repeat;filter:brightness(1.18) contrast(1.10) saturate(1.14)"></div>
+  <div style="position:absolute;inset:0;z-index:1;background:linear-gradient(to right, rgba(4,3,2,0.52) 0%, rgba(4,3,2,0.42) 55%, rgba(4,3,2,0.78) 100%)"></div>
+
+  <!-- LEFT — branding + weather -->
+  <div style="position:relative;z-index:2;flex:1;display:flex;flex-direction:column;justify-content:space-between;padding:40px 48px;min-width:0">
+
+    <!-- Top: ADG brand -->
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="width:44px;height:44px;background:linear-gradient(135deg,#2D5A1B,#C4A26A);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 12px rgba(196,162,106,.35)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
       </div>
-      <div style="font-size:15px;font-weight:800;color:#C4A26A;letter-spacing:.04em">AVANT DEVELOPMENT GROUP</div>
-      <div style="font-size:11px;color:#7A8C6A">GOTA HVAC Management · Staff Login</div>
+      <div>
+        <div style="font-size:13px;font-weight:800;color:#C4A26A;letter-spacing:.06em">AVANT DEVELOPMENT GROUP</div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.5);letter-spacing:.04em">GOTA HVAC Management · Austin, TX</div>
+      </div>
     </div>
-    <form id="loginForm" onsubmit="handleLogin(event)">
-      <label style="font-size:11px;font-weight:700;color:#7A8C6A;letter-spacing:.04em;text-transform:uppercase;display:block;margin-bottom:5px">Email</label>
-      <input id="loginEmail" type="email" autocomplete="username" placeholder="you@example.com" required style="margin-bottom:14px">
-      <label style="font-size:11px;font-weight:700;color:#7A8C6A;letter-spacing:.04em;text-transform:uppercase;display:block;margin-bottom:5px">Password</label>
-      <input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••••" required style="margin-bottom:6px">
-      <div id="loginError" style="font-size:11px;color:#F5A5A0;min-height:16px;margin-bottom:10px"></div>
-      <button id="loginBtn" type="submit" class="btn btn-tan" style="width:100%;font-size:13px;padding:11px">Sign In</button>
-    </form>
-    <div id="loginConfigWarn" style="display:none;margin-top:16px;font-size:10px;color:#7A8C6A;line-height:1.5;background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:10px"></div>
+
+    <!-- Center: weather widget -->
+    <div id="weatherWidget" style="display:flex;flex-direction:column;gap:6px">
+
+      <!-- City + date -->
+      <div style="font-size:11px;font-weight:700;color:rgba(196,162,106,0.80);letter-spacing:.12em;text-transform:uppercase" id="wxCity">Austin, Texas</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.45)" id="wxDate">Loading…</div>
+
+      <!-- Current temp + condition -->
+      <div style="display:flex;align-items:flex-end;gap:14px;margin-top:4px">
+        <div style="font-size:86px;font-weight:800;color:#F5EDD8;line-height:1;letter-spacing:-.03em" id="wxTemp">—</div>
+        <div style="padding-bottom:10px">
+          <div style="font-size:38px;line-height:1" id="wxIcon">🌤</div>
+          <div style="font-size:13px;font-weight:600;color:rgba(255,255,255,0.7);margin-top:4px" id="wxDesc">—</div>
+        </div>
+      </div>
+
+      <!-- High / Low -->
+      <div style="display:flex;gap:18px;margin-top:-4px">
+        <div style="font-size:13px;color:rgba(255,255,255,0.55)">H <span id="wxHigh" style="color:#fbbf24;font-weight:700">—</span></div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.55)">L <span id="wxLow" style="color:#90C8F0;font-weight:700">—</span></div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.55)">Feels <span id="wxFeels" style="color:#DDD5B8;font-weight:600">—</span></div>
+      </div>
+
+      <!-- 5-day forecast strip -->
+      <div id="wxForecast" style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap"></div>
+
+    </div>
+
+    <!-- Bottom: tagline -->
+    <div style="font-size:11px;color:rgba(255,255,255,0.28);letter-spacing:.03em">Staff access only · Avant Development Group © 2026</div>
   </div>
+
+  <!-- RIGHT — login form -->
+  <div style="position:relative;z-index:2;display:flex;align-items:center;justify-content:center;width:360px;flex-shrink:0;padding:28px 28px 28px 0">
+    <div style="width:100%;background:rgba(6,5,4,0.88);border:1px solid rgba(196,162,106,0.28);border-radius:18px;padding:32px 26px;box-shadow:0 28px 80px rgba(0,0,0,.7);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)">
+      <div style="font-size:16px;font-weight:800;color:#C4A26A;letter-spacing:.04em;margin-bottom:4px">Staff Sign In</div>
+      <div style="font-size:11px;color:#5A6A5A;margin-bottom:22px">GOTA HVAC Dashboard</div>
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <label style="font-size:10px;font-weight:700;color:#7A8C6A;letter-spacing:.06em;text-transform:uppercase;display:block;margin-bottom:5px">Email</label>
+        <input id="loginEmail" type="email" autocomplete="username" placeholder="you@example.com" required style="margin-bottom:14px">
+        <label style="font-size:10px;font-weight:700;color:#7A8C6A;letter-spacing:.06em;text-transform:uppercase;display:block;margin-bottom:5px">Password</label>
+        <input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••••" required style="margin-bottom:6px">
+        <div id="loginError" style="font-size:11px;color:#F5A5A0;min-height:16px;margin-bottom:10px"></div>
+        <button id="loginBtn" type="submit" class="btn btn-tan" style="width:100%;font-size:13px;padding:11px">Sign In</button>
+      </form>
+      <div id="loginConfigWarn" style="display:none;margin-top:16px;font-size:10px;color:#7A8C6A;line-height:1.5;background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:10px"></div>
+    </div>
+  </div>
+
 </div>
 
 <!-- ═══════════════════════════════════════════════
@@ -2429,15 +2479,77 @@ async function deleteRecording(idx) {
 }
 
 // ════════════════════════════════════════════════════════════
-// AUTH GATE
+// AUTH GATE + WEATHER
 // ════════════════════════════════════════════════════════════
 function showLoginGate() {
   const gate = document.getElementById('loginGate');
-  if (gate) gate.style.display = 'flex';
+  if (gate) { gate.style.display = 'flex'; loadAustinWeather(); }
 }
 function hideLoginGate() {
   const gate = document.getElementById('loginGate');
   if (gate) gate.style.display = 'none';
+}
+
+const WX_CODE = {
+  0:['☀️','Clear'],1:['🌤','Mainly Clear'],2:['⛅','Partly Cloudy'],3:['☁️','Overcast'],
+  45:['🌫','Foggy'],48:['🌫','Icy Fog'],
+  51:['🌦','Light Drizzle'],53:['🌦','Drizzle'],55:['🌧','Heavy Drizzle'],
+  61:['🌧','Light Rain'],63:['🌧','Rain'],65:['🌧','Heavy Rain'],
+  71:['❄️','Light Snow'],73:['❄️','Snow'],75:['❄️','Heavy Snow'],77:['🌨','Snow Grains'],
+  80:['🌦','Showers'],81:['🌧','Heavy Showers'],82:['⛈','Violent Showers'],
+  85:['🌨','Snow Showers'],86:['❄️','Heavy Snow Showers'],
+  95:['⛈','Thunderstorm'],96:['⛈','Thunderstorm + Hail'],99:['⛈','Severe Thunderstorm'],
+};
+
+function wxInfo(code) { return WX_CODE[code] || ['🌡','Unknown']; }
+
+async function loadAustinWeather() {
+  try {
+    const url = 'https://api.open-meteo.com/v1/forecast'
+      + '?latitude=30.2672&longitude=-97.7431'
+      + '&current=temperature_2m,apparent_temperature,weathercode'
+      + '&daily=temperature_2m_max,temperature_2m_min,weathercode'
+      + '&temperature_unit=fahrenheit'
+      + '&timezone=America%2FChicago'
+      + '&forecast_days=5';
+    const res = await fetch(url);
+    const d = await res.json();
+    const c = d.current;
+    const daily = d.daily;
+
+    const now = new Date();
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    const [icon, desc] = wxInfo(c.weathercode);
+    document.getElementById('wxDate').textContent =
+      days[now.getDay()] + ', ' + months[now.getMonth()] + ' ' + now.getDate() + ', ' + now.getFullYear();
+    document.getElementById('wxTemp').textContent  = Math.round(c.temperature_2m) + '°';
+    document.getElementById('wxIcon').textContent  = icon;
+    document.getElementById('wxDesc').textContent  = desc;
+    document.getElementById('wxHigh').textContent  = Math.round(daily.temperature_2m_max[0]) + '°';
+    document.getElementById('wxLow').textContent   = Math.round(daily.temperature_2m_min[0]) + '°';
+    document.getElementById('wxFeels').textContent = Math.round(c.apparent_temperature) + '°';
+
+    // 5-day forecast (skip today = index 0)
+    const strip = document.getElementById('wxForecast');
+    if (strip) {
+      strip.innerHTML = daily.time.slice(1, 5).map((t, i) => {
+        const idx = i + 1;
+        const dt = new Date(t + 'T12:00:00');
+        const [ico] = wxInfo(daily.weathercode[idx]);
+        return `<div style="background:rgba(255,255,255,0.07);border:1px solid rgba(196,162,106,0.14);border-radius:10px;padding:10px 12px;text-align:center;min-width:64px">
+          <div style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.5);letter-spacing:.05em;margin-bottom:5px">${days[dt.getDay()].toUpperCase()}</div>
+          <div style="font-size:20px;margin-bottom:5px">${ico}</div>
+          <div style="font-size:11px;font-weight:700;color:#fbbf24">${Math.round(daily.temperature_2m_max[idx])}°</div>
+          <div style="font-size:11px;color:#90C8F0">${Math.round(daily.temperature_2m_min[idx])}°</div>
+        </div>`;
+      }).join('');
+    }
+  } catch(e) {
+    const el = document.getElementById('wxDesc');
+    if (el) el.textContent = 'Weather unavailable';
+  }
 }
 
 async function handleLogin(e) {
