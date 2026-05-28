@@ -162,7 +162,7 @@
   <div style="position:absolute;inset:0;z-index:0;background:url('IMG_9065.JPG') center/cover no-repeat;filter:brightness(1.18) contrast(1.10) saturate(1.14)"></div>
   <div style="position:absolute;inset:0;z-index:1;background:linear-gradient(to right, rgba(4,3,2,0.52) 0%, rgba(4,3,2,0.42) 55%, rgba(4,3,2,0.78) 100%)"></div>
 
-  <!-- LEFT — branding + weather -->
+  <!-- LEFT — branding showcase -->
   <div style="position:relative;z-index:2;flex:1;display:flex;flex-direction:column;justify-content:space-between;padding:40px 48px;min-width:0">
 
     <!-- Top: ADG brand -->
@@ -176,43 +176,47 @@
       </div>
     </div>
 
-    <!-- Center: weather widget -->
-    <div id="weatherWidget" style="display:flex;flex-direction:column;gap:6px">
-
-      <!-- City + date -->
-      <div style="font-size:11px;font-weight:700;color:rgba(196,162,106,0.80);letter-spacing:.12em;text-transform:uppercase" id="wxCity">Austin, Texas</div>
-      <div style="font-size:11px;color:rgba(255,255,255,0.45)" id="wxDate">Loading…</div>
-
-      <!-- Current temp + condition -->
-      <div style="display:flex;align-items:flex-end;gap:14px;margin-top:4px">
-        <div style="font-size:86px;font-weight:800;color:#F5EDD8;line-height:1;letter-spacing:-.03em" id="wxTemp">—</div>
-        <div style="padding-bottom:10px">
-          <div style="font-size:38px;line-height:1" id="wxIcon">🌤</div>
-          <div style="font-size:13px;font-weight:600;color:rgba(255,255,255,0.7);margin-top:4px" id="wxDesc">—</div>
-        </div>
-      </div>
-
-      <!-- High / Low -->
-      <div style="display:flex;gap:18px;margin-top:-4px">
-        <div style="font-size:13px;color:rgba(255,255,255,0.55)">H <span id="wxHigh" style="color:#fbbf24;font-weight:700">—</span></div>
-        <div style="font-size:13px;color:rgba(255,255,255,0.55)">L <span id="wxLow" style="color:#90C8F0;font-weight:700">—</span></div>
-        <div style="font-size:13px;color:rgba(255,255,255,0.55)">Feels <span id="wxFeels" style="color:#DDD5B8;font-weight:600">—</span></div>
-      </div>
-
-      <!-- 5-day forecast strip -->
-      <div id="wxForecast" style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap"></div>
-
-    </div>
-
     <!-- Bottom: tagline -->
     <div style="font-size:11px;color:rgba(255,255,255,0.28);letter-spacing:.03em">Staff access only · Avant Development Group © 2026</div>
   </div>
 
-  <!-- RIGHT — login form -->
-  <div style="position:relative;z-index:2;display:flex;align-items:center;justify-content:center;width:360px;flex-shrink:0;padding:28px 28px 28px 0">
-    <div style="width:100%;background:rgba(6,5,4,0.88);border:1px solid rgba(196,162,106,0.28);border-radius:18px;padding:32px 26px;box-shadow:0 28px 80px rgba(0,0,0,.7);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)">
+  <!-- RIGHT — weather on top, login lowered below -->
+  <div style="position:relative;z-index:2;display:flex;flex-direction:column;justify-content:flex-end;align-items:stretch;width:400px;flex-shrink:0;padding:28px 28px 60px 0;gap:20px">
+
+    <!-- Weather widget (frosted card, on top) -->
+    <div id="weatherWidget" style="background:rgba(6,5,4,0.80);border:1px solid rgba(196,162,106,0.24);border-radius:18px;padding:22px 24px;box-shadow:0 20px 60px rgba(0,0,0,.55);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)">
+
+      <!-- City + date -->
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <div style="font-size:11px;font-weight:700;color:rgba(196,162,106,0.85);letter-spacing:.12em;text-transform:uppercase" id="wxCity">Austin, Texas</div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.45)" id="wxDate">Loading…</div>
+      </div>
+
+      <!-- Current temp + condition -->
+      <div style="display:flex;align-items:flex-end;gap:12px;margin-top:6px">
+        <div style="font-size:64px;font-weight:800;color:#F5EDD8;line-height:1;letter-spacing:-.03em" id="wxTemp">—</div>
+        <div style="padding-bottom:8px">
+          <div style="font-size:30px;line-height:1" id="wxIcon">🌤</div>
+          <div style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.7);margin-top:3px" id="wxDesc">—</div>
+        </div>
+      </div>
+
+      <!-- High / Low / Feels -->
+      <div style="display:flex;gap:16px;margin-top:8px">
+        <div style="font-size:12px;color:rgba(255,255,255,0.55)">H <span id="wxHigh" style="color:#fbbf24;font-weight:700">—</span></div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.55)">L <span id="wxLow" style="color:#90C8F0;font-weight:700">—</span></div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.55)">Feels <span id="wxFeels" style="color:#DDD5B8;font-weight:600">—</span></div>
+      </div>
+
+      <!-- 4-day forecast strip -->
+      <div id="wxForecast" style="display:flex;gap:6px;margin-top:16px;justify-content:space-between"></div>
+
+    </div>
+
+    <!-- Login form (frosted card, lowered) -->
+    <div style="background:rgba(6,5,4,0.88);border:1px solid rgba(196,162,106,0.28);border-radius:18px;padding:28px 26px;box-shadow:0 28px 80px rgba(0,0,0,.7);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)">
       <div style="font-size:16px;font-weight:800;color:#C4A26A;letter-spacing:.04em;margin-bottom:4px">Staff Sign In</div>
-      <div style="font-size:11px;color:#5A6A5A;margin-bottom:22px">GOTA HVAC Dashboard</div>
+      <div style="font-size:11px;color:#5A6A5A;margin-bottom:20px">GOTA HVAC Dashboard</div>
       <form id="loginForm" onsubmit="handleLogin(event)">
         <label style="font-size:10px;font-weight:700;color:#7A8C6A;letter-spacing:.06em;text-transform:uppercase;display:block;margin-bottom:5px">Email</label>
         <input id="loginEmail" type="email" autocomplete="username" placeholder="you@example.com" required style="margin-bottom:14px">
