@@ -2,12 +2,13 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // GOTA HVAC unit data
-    // All 152 units — open read/write for now.
-    // Restrict to authenticated users once Firebase Auth is added:
-    //   allow read, write: if request.auth != null;
+    // ── GOTA HVAC unit data ────────────────────────────────────────
+    // Contains private owner names, phone numbers, emails, and notes.
+    // Locked to signed-in staff only. The public landing page (when
+    // built) must NOT read this collection directly — it will use a
+    // separate, sanitized path or a Cloud Function.
     match /units/{unitId} {
-      allow read, write: if true;
+      allow read, write: if request.auth != null;
     }
 
   }
