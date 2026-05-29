@@ -14,7 +14,11 @@
 
     /* ── Unit cells ── */
     .unit-cell{display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;cursor:pointer;border-radius:4px;border:1px solid;transition:transform .12s,box-shadow .12s;user-select:none;letter-spacing:.01em}
-    .unit-cell:hover{transform:scale(1.12);z-index:20;position:relative;box-shadow:0 0 0 2px #C4A26A}
+    .unit-cell:hover{z-index:20;position:relative}
+    .unit-hover-main{transform:scale(1.22)!important;z-index:30!important;position:relative!important;box-shadow:0 0 0 2px #C4A26A,0 6px 20px rgba(0,0,0,.55)!important}
+    .unit-hover-near{transform:scale(1.10)!important;z-index:22!important;position:relative!important}
+    .unit-hover-far {transform:scale(1.05)!important;z-index:21!important;position:relative!important}
+    .unit-multi-sel {outline:2px solid #C4A26A!important;outline-offset:3px!important;box-shadow:0 0 14px rgba(196,162,106,0.65)!important}
     .unit-good      {background:rgba(16,40,12,0.95);border-color:#3A7A22;color:#90D060;box-shadow:0 1px 6px rgba(58,122,34,.30)}
     .unit-due       {background:rgba(100,44,8,0.95);border-color:#E08800;color:#F5C840;box-shadow:0 1px 6px rgba(224,136,0,.28)}
     .unit-overdue   {background:rgba(80,14,8,0.95);border-color:#C0392B;color:#F08080;box-shadow:0 1px 6px rgba(192,57,43,.28)}
@@ -272,6 +276,9 @@
       <button id="btnMap" onclick="setView('map')" class="btn btn-blue" style="font-size:11px;padding:5px 12px">🗺 Map</button>
       <button id="btnList" onclick="setView('list')" class="btn btn-gray" style="font-size:11px;padding:5px 12px">☰ List</button>
     </div>
+
+    <!-- Multi-select -->
+    <button id="btnMultiSelect" onclick="toggleMultiSelect()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0" title="Select multiple units to bulk-schedule a job">☑ Select Units</button>
 
     <!-- Reset -->
     <button onclick="confirmReset()" class="btn btn-gray" style="font-size:10px;padding:4px 10px;opacity:.5" title="Reset all data">↺ Reset</button>
@@ -551,6 +558,15 @@
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════
+     BULK ACTION BAR
+═══════════════════════════════════════════════ -->
+<div id="bulkBar" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0C0E1A;border:1px solid #C4A26A;border-radius:14px;padding:13px 22px;z-index:90;align-items:center;gap:14px;box-shadow:0 12px 48px rgba(0,0,0,.85);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);white-space:nowrap">
+  <div style="font-size:13px;font-weight:700;color:#F5EDD8"><span id="bulkCount" style="color:#C4A26A;font-size:16px;font-weight:900">0</span> units selected</div>
+  <button class="btn btn-blue" style="font-size:12px" onclick="openBulkScheduleModal()">📅 Schedule Job</button>
+  <button class="btn btn-gray" style="font-size:12px" onclick="clearMultiSelect()">✕ Clear</button>
+</div>
+
 <!-- Toast -->
 <div id="toast"></div>
 
@@ -673,6 +689,8 @@ let activeSearch = '';
 let activeFilter = 'all';
 let currentView = 'map';
 let activeTab = 'overview';
+let multiSelectMode = false;
+const selectedUnits = new Set();
 
 // ════════════════════════════════════════════════════════════
 // INIT
@@ -871,7 +889,8 @@ function renderMap() {
             cell.textContent = '#' + id;
             cell.title = `Unit #${id} — ${u.ownerName || 'No owner'} | ${u.status || 'unconfigured'}`;
             if (id === selectedId) cell.classList.add('unit-selected');
-            cell.addEventListener('click', () => openUnit(id));
+            cell.addEventListener('click', () => { if (multiSelectMode) { toggleUnitSelection(id, cell); return; } openUnit(id); });
+            attachHoverRipple(cell);
             rowEl.appendChild(cell);
             wrapper.appendChild(rowEl);
           });
@@ -892,7 +911,8 @@ function renderMap() {
           cell.textContent = '#' + id;
           cell.title = `Unit #${id} — ${u.ownerName || 'No owner'} | ${u.status || 'unconfigured'}`;
           if (id === selectedId) cell.classList.add('unit-selected');
-          cell.addEventListener('click', () => openUnit(id));
+          cell.addEventListener('click', () => { if (multiSelectMode) { toggleUnitSelection(id, cell); return; } openUnit(id); });
+          attachHoverRipple(cell);
           rowEl.appendChild(cell);
         });
         grid.appendChild(rowEl);
@@ -917,6 +937,121 @@ function getWorstStatus(ids) {
 function openMergedChoice(ids) {
   // Simple: open first unit; a future improvement could show a picker
   openUnit(ids[0]);
+}
+
+// ════════════════════════════════════════════════════════════
+// HOVER RIPPLE EFFECT
+// ════════════════════════════════════════════════════════════
+function attachHoverRipple(cell) {
+  cell.addEventListener('mouseenter', () => {
+    if (multiSelectMode) return;
+    const row = cell.parentElement;
+    // Walk up to units-grid (handles vertical-merge wrappers too)
+    let grid = row.parentElement;
+    while (grid && !grid.classList.contains('units-grid')) grid = grid.parentElement;
+    if (!grid) return;
+    const rows = Array.from(grid.querySelectorAll('.unit-row'));
+    const rowIdx = rows.indexOf(row);
+    // Direct same-row neighbors
+    Array.from(row.querySelectorAll('.unit-cell')).forEach(c => {
+      if (c !== cell) c.classList.add('unit-hover-near');
+    });
+    // Rows immediately above and below
+    [-1, 1].forEach(d => {
+      const adj = rows[rowIdx + d];
+      if (adj) adj.querySelectorAll('.unit-cell').forEach(c => c.classList.add('unit-hover-far'));
+    });
+    cell.classList.add('unit-hover-main');
+  });
+  cell.addEventListener('mouseleave', () => {
+    document.querySelectorAll('.unit-hover-main,.unit-hover-near,.unit-hover-far')
+      .forEach(c => c.classList.remove('unit-hover-main','unit-hover-near','unit-hover-far'));
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// MULTI-UNIT SELECTION & BULK SCHEDULING
+// ════════════════════════════════════════════════════════════
+function toggleMultiSelect() {
+  multiSelectMode = !multiSelectMode;
+  const btn = document.getElementById('btnMultiSelect');
+  if (multiSelectMode) {
+    btn.className = 'btn btn-tan';
+    btn.textContent = '☑ Selecting…';
+    showToast('☑', 'Click units to select them, then tap Schedule Job');
+  } else {
+    btn.className = 'btn btn-gray';
+    btn.textContent = '☑ Select Units';
+    clearMultiSelect();
+  }
+}
+
+function toggleUnitSelection(id, cell) {
+  if (selectedUnits.has(id)) {
+    selectedUnits.delete(id);
+    cell.classList.remove('unit-multi-sel');
+  } else {
+    selectedUnits.add(id);
+    cell.classList.add('unit-multi-sel');
+  }
+  updateBulkBar();
+}
+
+function clearMultiSelect() {
+  selectedUnits.clear();
+  document.querySelectorAll('.unit-multi-sel').forEach(c => c.classList.remove('unit-multi-sel'));
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById('bulkBar');
+  if (selectedUnits.size > 0 && multiSelectMode) {
+    document.getElementById('bulkCount').textContent = selectedUnits.size;
+    bar.style.display = 'flex';
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+function openBulkScheduleModal() {
+  if (!selectedUnits.size) return;
+  document.getElementById('schedUnitLabel').textContent = `${selectedUnits.size} unit${selectedUnits.size>1?'s':''}`;
+  document.getElementById('schedDate').value = '';
+  document.getElementById('schedType').value = '';
+  schedToggleCategory('');
+  const catEl = document.getElementById('schedRepairCategory');
+  if (catEl) catEl.value = '';
+  document.getElementById('schedTech').value = '';
+  document.getElementById('schedNotes').value = '';
+  document.getElementById('scheduleModal').style.display = 'flex';
+}
+
+function submitBulkSchedule() {
+  const date  = document.getElementById('schedDate').value;
+  const type  = document.getElementById('schedType').value;
+  const cat   = document.getElementById('schedRepairCategory')?.value || '';
+  const tech  = document.getElementById('schedTech').value;
+  const notes = document.getElementById('schedNotes').value;
+  if (!date) { showToast('⚠️', 'Please select a date'); return; }
+  if (!type) { showToast('⚠️', 'Please select a service type'); return; }
+  const ids = [...selectedUnits];
+  ids.forEach(id => {
+    const u = DATA[id];
+    if (!u) return;
+    if (!u.scheduledWork) u.scheduledWork = [];
+    u.scheduledWork.push({ id: Date.now() + Math.random(), date, type, repairCategory: cat, tech: tech||'', notes: notes||'', status:'pending' });
+    const earliest = u.scheduledWork.filter(i=>i.status==='pending').map(i=>i.date).sort()[0];
+    if (earliest) { u.nextService = earliest; autoStatus(id); }
+    persist(id);
+    refreshCell(id);
+  });
+  updateStats();
+  closeModal('scheduleModal');
+  clearMultiSelect();
+  multiSelectMode = false;
+  const btn = document.getElementById('btnMultiSelect');
+  if (btn) { btn.className = 'btn btn-gray'; btn.textContent = '☑ Select Units'; }
+  showToast('📅', `${type} scheduled for ${ids.length} unit${ids.length>1?'s':''} on ${fmtDate(date)}`);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1712,7 +1847,9 @@ function autoStatus(id) {
 function refreshCell(id) {
   const u = DATA[id];
   document.querySelectorAll(`.unit-cell[data-id="${id}"]`).forEach(c => {
-    c.className = 'unit-cell unit-' + u.status + (id === selectedId ? ' unit-selected' : '');
+    const isSel = id === selectedId;
+    const isMulti = selectedUnits.has(id);
+    c.className = 'unit-cell unit-' + u.status + (isSel ? ' unit-selected' : '') + (isMulti ? ' unit-multi-sel' : '');
     c.style.cssText = 'width:52px;height:25px';
     c.title = `Unit #${id} — ${u.ownerName||'No owner'} | ${u.status}`;
   });
@@ -1786,6 +1923,7 @@ function openScheduleModal(prefill) {
 }
 
 function submitSchedule() {
+  if (multiSelectMode && selectedUnits.size > 0) { submitBulkSchedule(); return; }
   const date  = document.getElementById('schedDate').value;
   const type  = document.getElementById('schedType').value;
   const cat   = document.getElementById('schedRepairCategory')?.value || '';
