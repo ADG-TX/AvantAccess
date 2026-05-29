@@ -277,6 +277,9 @@
       <button id="btnList" onclick="setView('list')" class="btn btn-gray" style="font-size:11px;padding:5px 12px">☰ List</button>
     </div>
 
+    <!-- Site Photos -->
+    <button onclick="openSitePhotos()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0" title="Jobsite photo archive — drag & drop to upload">📷 Site Photos</button>
+
     <!-- Multi-select -->
     <button id="btnMultiSelect" onclick="toggleMultiSelect()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0" title="Select multiple units to bulk-schedule a job">☑ Select Units</button>
 
@@ -559,6 +562,109 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════
+     MODAL: CLUBHOUSE
+═══════════════════════════════════════════════ -->
+<div id="clubhouseModal" class="modal-wrap" style="display:none" onclick="if(event.target===this)closeModal('clubhouseModal')">
+  <div class="modal-box" style="max-width:620px;max-height:92vh" onclick="event.stopPropagation()">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div>
+        <h3 style="font-size:18px;font-weight:900;color:#C4A26A;letter-spacing:.04em">🏛 Clubhouse</h3>
+        <div style="font-size:11px;color:#5A6A5A;margin-top:2px">Bldg 8 · 800/801 position · GOTA</div>
+      </div>
+      <button onclick="closeModal('clubhouseModal')" style="background:none;border:none;color:#7A8C6A;cursor:pointer;font-size:20px;line-height:1;padding:4px">×</button>
+    </div>
+
+    <!-- Notes -->
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;color:#7A8C6A;font-weight:700;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px">Notes & Details</label>
+      <textarea id="clubNotes" rows="3" placeholder="Access codes, features, amenities, current work status…" style="resize:vertical;font-size:13px"></textarea>
+      <button class="btn btn-gray" style="margin-top:6px;font-size:11px" onclick="saveClubhouseNotes()">💾 Save Notes</button>
+    </div>
+
+    <!-- Main Photo -->
+    <div id="clubMainPhotoWrap" style="margin-bottom:14px"></div>
+
+    <!-- Photo Upload -->
+    <div style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <label style="font-size:11px;color:#7A8C6A;font-weight:700;text-transform:uppercase;letter-spacing:.06em">Clubhouse Photos</label>
+        <span id="clubPhotoCount" style="font-size:11px;color:#7A8C6A">0 photos</span>
+      </div>
+      <div id="clubDropZone" class="photo-drop-zone" onclick="document.getElementById('clubFileInput').click()" ondrop="handleClubDrop(event)" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')">
+        <span style="font-size:28px">📷</span>
+        <span style="font-size:13px;font-weight:700;color:#DDD5B8">Drop photos here or click to browse</span>
+        <span style="font-size:11px;color:#4D5C3D">JPG, PNG — multiple files OK</span>
+        <input type="file" id="clubFileInput" accept="image/*" multiple style="display:none" onchange="handleClubFileInput(this)">
+      </div>
+      <div id="clubPhotoGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:10px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     MODAL: SITE PHOTOS
+═══════════════════════════════════════════════ -->
+<div id="sitePhotosModal" class="modal-wrap" style="display:none" onclick="if(event.target===this)closeModal('sitePhotosModal')">
+  <div class="modal-box" style="max-width:760px;max-height:92vh;width:100%" onclick="event.stopPropagation()">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div>
+        <h3 style="font-size:18px;font-weight:900;color:#C4A26A;letter-spacing:.04em">📷 Jobsite Photo Archive</h3>
+        <div style="font-size:11px;color:#5A6A5A;margin-top:2px">General site photos — drag &amp; drop to upload</div>
+      </div>
+      <button onclick="closeModal('sitePhotosModal')" style="background:none;border:none;color:#7A8C6A;cursor:pointer;font-size:20px;line-height:1;padding:4px">×</button>
+    </div>
+
+    <!-- Drop zone -->
+    <div id="siteDropZone" class="photo-drop-zone" style="margin-bottom:14px" onclick="document.getElementById('siteFileInput').click()" ondrop="handleSiteDrop(event)" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')">
+      <span style="font-size:36px">📷</span>
+      <span style="font-size:14px;font-weight:700;color:#DDD5B8">Drop photos anywhere here to upload</span>
+      <span style="font-size:12px;color:#4D5C3D">JPG, PNG · Multiple files at once · No limit</span>
+      <input type="file" id="siteFileInput" accept="image/*" multiple style="display:none" onchange="handleSiteFileInput(this)">
+    </div>
+    <div id="siteUploadProgress" style="display:none;margin-bottom:10px;font-size:12px;color:#C4A26A;font-weight:700;text-align:center"></div>
+
+    <!-- Gallery -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span style="font-size:11px;font-weight:700;color:#7A8C6A;text-transform:uppercase;letter-spacing:.06em">All Site Photos</span>
+      <span id="sitePhotoCount" style="font-size:11px;color:#7A8C6A">0 photos</span>
+    </div>
+    <div id="sitePhotoGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;max-height:380px;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     MODAL: CLAUDE VISION
+═══════════════════════════════════════════════ -->
+<div id="visionModal" class="modal-wrap" style="display:none" onclick="if(event.target===this)closeModal('visionModal')">
+  <div class="modal-box" style="max-width:600px" onclick="event.stopPropagation()">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div>
+        <h3 style="font-size:16px;font-weight:900;color:#90C8F0;letter-spacing:.03em">🔍 Ask Claude About This Photo</h3>
+        <div style="font-size:11px;color:#5A6A5A;margin-top:2px">Claude Vision AI — powered by claude-sonnet-4-6</div>
+      </div>
+      <button onclick="closeModal('visionModal')" style="background:none;border:none;color:#7A8C6A;cursor:pointer;font-size:20px;padding:4px">×</button>
+    </div>
+    <img id="visionImg" src="" style="width:100%;max-height:220px;object-fit:contain;border-radius:8px;border:1px solid #1E2840;margin-bottom:12px;background:#0A0C18">
+    <div style="margin-bottom:10px">
+      <label style="font-size:11px;color:#7A8C6A;font-weight:700;display:block;margin-bottom:6px">What do you want to know about this photo?</label>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px">
+        <button class="btn btn-gray" style="font-size:10px" onclick="setVisionQ('What HVAC components, equipment, or issues can you see in this photo?')">🔧 HVAC components</button>
+        <button class="btn btn-gray" style="font-size:10px" onclick="setVisionQ('Describe any maintenance issues, damage, or problems visible in this photo.')">⚠️ Issues / damage</button>
+        <button class="btn btn-gray" style="font-size:10px" onclick="setVisionQ('What work appears to have been completed in this photo? What stage of installation is this?')">📋 Work progress</button>
+        <button class="btn btn-gray" style="font-size:10px" onclick="setVisionQ('What materials, parts, or supplies are visible in this photo?')">📦 Materials</button>
+      </div>
+      <textarea id="visionQuestion" rows="2" placeholder="e.g. Is the refrigerant line insulated? What type of mounting bracket is that?" style="resize:vertical;font-size:13px"></textarea>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn btn-blue" style="flex:1;font-size:12px" onclick="analyzePhoto()" id="visionAnalyzeBtn">🔍 Analyze Photo</button>
+      <button class="btn btn-gray" onclick="closeModal('visionModal')">Cancel</button>
+    </div>
+    <div id="visionResult" style="display:none;background:#060810;border:1px solid #1E2840;border-radius:8px;padding:14px;font-size:13px;color:#DDD5B8;line-height:1.6;white-space:pre-wrap;max-height:280px;overflow-y:auto"></div>
+    <div id="visionApiWarn" style="display:none;margin-top:10px;font-size:11px;color:#7A8C6A;background:#0D1509;border:1px solid #1C2D16;border-radius:6px;padding:10px"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
      BULK ACTION BAR
 ═══════════════════════════════════════════════ -->
 <div id="bulkBar" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0C0E1A;border:1px solid #C4A26A;border-radius:14px;padding:13px 22px;z-index:90;align-items:center;gap:14px;box-shadow:0 12px 48px rgba(0,0,0,.85);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);white-space:nowrap">
@@ -637,7 +743,7 @@ const LAYOUT = [
     { id:'B7', name:'Bldg 7', size:'30×50',
       rows:[['714','713'],['712','711'],['710','709'],['708','707'],['706','705'],['704','703'],['702','701']] },
     { id:'B8', name:'Bldg 8', size:'30×50',
-      rows:[['802','803'],['804','805'],['806','807'],['808','809'],['810','811'],['812','813']] },
+      rows:[['__CLUBHOUSE__'],['802','803'],['804','805'],['806','807'],['808','809'],['810','811'],['812','813']] },
     { id:'B9', name:'Bldg 9', size:'30×50',
       rows:[['902','901'],['904','903'],['906','905'],['908','907'],['910','909'],['912','911'],['914','913'],['916','915']] },
   ]},
@@ -691,6 +797,11 @@ let currentView = 'map';
 let activeTab = 'overview';
 let multiSelectMode = false;
 const selectedUnits = new Set();
+let CLUBHOUSE = { notes:'', photos:[], mainPhotoUrl:'', mainPhotoName:'' };
+let SITE_PHOTOS = [];
+
+// ── Claude Vision API key (set this once you have your Anthropic API key) ──
+const ANTHROPIC_API_KEY = '';  // paste your sk-ant-... key here
 
 // ════════════════════════════════════════════════════════════
 // INIT
@@ -729,6 +840,8 @@ async function init() {
         localStorage.setItem('gota_hvac_v2', JSON.stringify(DATA));
         renderMap();
         updateStats();
+        loadClubhouse();
+        loadSitePhotos();
         return;
       }
     } catch(e) {
@@ -748,6 +861,8 @@ async function init() {
   if (firestoreReady) syncToFirestore();
   renderMap();
   updateStats();
+  loadClubhouse();
+  loadSitePhotos();
 }
 
 function buildDefaults() {
@@ -842,6 +957,23 @@ function renderMap() {
       g.rows.forEach(row => {
         // Skip rows that were already absorbed into a vertical merged block
         if (row.length === 1 && rendered.has(row[0])) return;
+
+        // Special: Clubhouse cell
+        if (row.length === 1 && row[0] === '__CLUBHOUSE__') {
+          const rowEl = document.createElement('div');
+          rowEl.className = 'unit-row';
+          const cell = document.createElement('div');
+          cell.className = 'unit-cell';
+          cell.style.cssText = 'width:107px;height:38px;background:linear-gradient(135deg,rgba(50,38,12,0.96),rgba(72,52,16,0.96));border:2px solid #C4A26A;color:#C4A26A;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;flex-direction:column;gap:2px;cursor:pointer';
+          cell.innerHTML = '<span style="font-size:15px;line-height:1">🏛</span><span>Clubhouse</span>';
+          cell.title = 'Clubhouse — click to manage photos & info';
+          cell.addEventListener('mouseenter', () => { cell.style.borderColor='#E8C880'; cell.style.boxShadow='0 0 14px rgba(196,162,106,0.55)'; });
+          cell.addEventListener('mouseleave', () => { cell.style.borderColor='#C4A26A'; cell.style.boxShadow=''; });
+          cell.addEventListener('click', () => openClubhouse());
+          rowEl.appendChild(cell);
+          grid.appendChild(rowEl);
+          return;
+        }
 
         // Check: is this a horizontal merge row? (all cells in same merge group)
         const mg0 = row.length > 1 ? UNIT_TO_MERGE[row[0]] : null;
@@ -2381,12 +2513,302 @@ function showMicroSave() {
 }
 
 // ════════════════════════════════════════════════════════════
+// CLUBHOUSE
+// ════════════════════════════════════════════════════════════
+async function loadClubhouse() {
+  if (!firestoreReady) return;
+  try {
+    const doc = await db.collection('properties').doc('clubhouse').get();
+    if (doc.exists) CLUBHOUSE = Object.assign({ notes:'', photos:[], mainPhotoUrl:'', mainPhotoName:'' }, doc.data());
+  } catch(e) { console.warn('Clubhouse load failed:', e); }
+}
+
+function persistClubhouse() {
+  if (!firestoreReady) return;
+  db.collection('properties').doc('clubhouse').set(CLUBHOUSE).catch(e => console.error('Clubhouse save error:', e));
+}
+
+function openClubhouse() {
+  const modal = document.getElementById('clubhouseModal');
+  modal.style.display = 'flex';
+  document.getElementById('clubNotes').value = CLUBHOUSE.notes || '';
+  renderClubhouseMainPhoto();
+  renderClubhouseGrid();
+}
+
+function saveClubhouseNotes() {
+  CLUBHOUSE.notes = document.getElementById('clubNotes').value;
+  persistClubhouse();
+  showToast('💾', 'Clubhouse notes saved');
+}
+
+function renderClubhouseMainPhoto() {
+  const wrap = document.getElementById('clubMainPhotoWrap');
+  if (!wrap) return;
+  if (CLUBHOUSE.mainPhotoUrl) {
+    wrap.innerHTML = `<div style="position:relative;border-radius:8px;overflow:hidden;margin-bottom:4px;cursor:pointer" onclick="openLightbox('${escAttr(CLUBHOUSE.mainPhotoUrl)}','Clubhouse')">
+      <img src="${escAttr(CLUBHOUSE.mainPhotoUrl)}" style="width:100%;height:140px;object-fit:cover;display:block">
+      <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.7));padding:8px 10px;display:flex;justify-content:space-between;align-items:flex-end">
+        <span style="font-size:11px;color:#C4A26A;font-weight:700">📷 Main Photo</span>
+        <button onclick="event.stopPropagation();CLUBHOUSE.mainPhotoUrl='';CLUBHOUSE.mainPhotoName='';persistClubhouse();renderClubhouseMainPhoto()" style="font-size:10px;background:rgba(0,0,0,.5);border:1px solid #C0392B;color:#F5A5A0;padding:2px 7px;border-radius:4px;cursor:pointer">✕ Clear</button>
+      </div>
+    </div>`;
+  } else {
+    wrap.innerHTML = '';
+  }
+}
+
+function renderClubhouseGrid() {
+  const grid = document.getElementById('clubPhotoGrid');
+  const count = document.getElementById('clubPhotoCount');
+  if (!grid) return;
+  const photos = CLUBHOUSE.photos || [];
+  count.textContent = `${photos.length} photo${photos.length!==1?'s':''}`;
+  if (!photos.length) { grid.innerHTML = ''; return; }
+  grid.innerHTML = photos.map((p,i) => `
+    <div class="photo-card">
+      <img src="${escAttr(p.url)}" alt="${escAttr(p.name)}" onclick="openLightbox('${escAttr(p.url)}','${escAttr(p.name)}')">
+      <div style="padding:4px 6px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:9px;color:#7A8C6A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70px">${escHtml(p.name)}</span>
+        <div style="display:flex;gap:4px">
+          <button title="Set as main" onclick="setClubhouseMainPhoto(${i})" style="font-size:10px;background:none;border:none;color:#C4A26A;cursor:pointer;padding:0">★</button>
+          <button onclick="deleteClubhousePhoto(${i})" style="font-size:10px;background:none;border:none;color:#F08080;cursor:pointer;padding:0">✕</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function setClubhouseMainPhoto(idx) {
+  const p = (CLUBHOUSE.photos||[])[idx];
+  if (!p) return;
+  CLUBHOUSE.mainPhotoUrl = p.url;
+  CLUBHOUSE.mainPhotoName = p.name;
+  persistClubhouse();
+  renderClubhouseMainPhoto();
+  showToast('★', 'Main photo set');
+}
+
+async function deleteClubhousePhoto(idx) {
+  const p = (CLUBHOUSE.photos||[])[idx];
+  if (!p) return;
+  if (storage && p.storagePath) {
+    try { await storage.ref(p.storagePath).delete(); } catch(e) {}
+  }
+  CLUBHOUSE.photos.splice(idx, 1);
+  if (CLUBHOUSE.mainPhotoUrl === p.url) { CLUBHOUSE.mainPhotoUrl = ''; CLUBHOUSE.mainPhotoName = ''; }
+  persistClubhouse();
+  renderClubhouseMainPhoto();
+  renderClubhouseGrid();
+}
+
+function handleClubDrop(e) {
+  e.preventDefault();
+  document.getElementById('clubDropZone').classList.remove('drag-over');
+  uploadClubhouseFiles([...e.dataTransfer.files]);
+}
+function handleClubFileInput(input) { uploadClubhouseFiles([...input.files]); input.value = ''; }
+
+async function uploadClubhouseFiles(files) {
+  const imgs = files.filter(f => f.type.startsWith('image/'));
+  if (!imgs.length) return;
+  showToast('⬆️', `Uploading ${imgs.length} photo${imgs.length>1?'s':''}…`);
+  for (const file of imgs) {
+    const path = `clubhouse/photos/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
+    let url = URL.createObjectURL(file);
+    if (firebaseReady && storage) {
+      try {
+        const ref = storage.ref(path);
+        await ref.put(file);
+        url = await ref.getDownloadURL();
+      } catch(e) { console.error('Upload error:', e); }
+    }
+    if (!CLUBHOUSE.photos) CLUBHOUSE.photos = [];
+    CLUBHOUSE.photos.push({ url, name: file.name, storagePath: path, uploadedAt: new Date().toISOString() });
+  }
+  persistClubhouse();
+  renderClubhouseGrid();
+  showToast('✅', `${imgs.length} photo${imgs.length>1?'s':''} added to Clubhouse`);
+}
+
+// ════════════════════════════════════════════════════════════
+// SITE PHOTOS (Jobsite Archive)
+// ════════════════════════════════════════════════════════════
+async function loadSitePhotos() {
+  if (!firestoreReady) return;
+  try {
+    const doc = await db.collection('properties').doc('sitePhotos').get();
+    if (doc.exists && doc.data().photos) SITE_PHOTOS = doc.data().photos;
+  } catch(e) { console.warn('Site photos load failed:', e); }
+}
+
+function persistSitePhotos() {
+  if (!firestoreReady) return;
+  db.collection('properties').doc('sitePhotos').set({ photos: SITE_PHOTOS }).catch(e => console.error('Site photos save error:', e));
+}
+
+function openSitePhotos() {
+  document.getElementById('sitePhotosModal').style.display = 'flex';
+  renderSitePhotoGrid();
+}
+
+function renderSitePhotoGrid() {
+  const grid = document.getElementById('sitePhotoGrid');
+  const count = document.getElementById('sitePhotoCount');
+  if (!grid) return;
+  count.textContent = `${SITE_PHOTOS.length} photo${SITE_PHOTOS.length!==1?'s':''}`;
+  if (!SITE_PHOTOS.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px 16px;color:#4D5C3D"><div style="font-size:36px;margin-bottom:8px">📷</div><div style="font-size:14px;font-weight:600;color:#7A8C6A">No photos yet</div><div style="font-size:12px;margin-top:4px">Drop photos above to get started.</div></div>';
+    return;
+  }
+  grid.innerHTML = SITE_PHOTOS.map((p,i) => `
+    <div class="photo-card">
+      <img src="${escAttr(p.url)}" alt="${escAttr(p.name)}" onclick="openLightbox('${escAttr(p.url)}','${escAttr(p.name)}')">
+      <div style="padding:4px 6px 3px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+          <span style="font-size:9px;color:#7A8C6A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px" title="${escAttr(p.name)}">${escHtml(p.name)}</span>
+          <button onclick="deleteSitePhoto(${i})" style="font-size:10px;background:none;border:none;color:#F08080;cursor:pointer;padding:0;flex-shrink:0">✕</button>
+        </div>
+        <button onclick="openVisionModal('${escAttr(p.url)}','${escAttr(p.name)}')" style="width:100%;font-size:9px;padding:2px 4px;background:#0A1428;border:1px solid #1E3A5A;color:#90C8F0;border-radius:3px;cursor:pointer;font-weight:700">🔍 Ask Claude</button>
+      </div>
+    </div>`).join('');
+}
+
+async function deleteSitePhoto(idx) {
+  const p = SITE_PHOTOS[idx];
+  if (!p) return;
+  if (storage && p.storagePath) {
+    try { await storage.ref(p.storagePath).delete(); } catch(e) {}
+  }
+  SITE_PHOTOS.splice(idx, 1);
+  persistSitePhotos();
+  renderSitePhotoGrid();
+}
+
+function handleSiteDrop(e) {
+  e.preventDefault();
+  document.getElementById('siteDropZone').classList.remove('drag-over');
+  uploadSiteFiles([...e.dataTransfer.files]);
+}
+function handleSiteFileInput(input) { uploadSiteFiles([...input.files]); input.value = ''; }
+
+async function uploadSiteFiles(files) {
+  const imgs = files.filter(f => f.type.startsWith('image/'));
+  if (!imgs.length) return;
+  const prog = document.getElementById('siteUploadProgress');
+  prog.style.display = 'block';
+  for (let i = 0; i < imgs.length; i++) {
+    const file = imgs[i];
+    prog.textContent = `Uploading ${i+1} of ${imgs.length}: ${file.name}…`;
+    const path = `jobsite/photos/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
+    let url = URL.createObjectURL(file);
+    if (firebaseReady && storage) {
+      try {
+        const ref = storage.ref(path);
+        await ref.put(file);
+        url = await ref.getDownloadURL();
+      } catch(e) { console.error('Site photo upload error:', e); }
+    }
+    SITE_PHOTOS.push({ url, name: file.name, storagePath: path, uploadedAt: new Date().toISOString() });
+  }
+  persistSitePhotos();
+  prog.style.display = 'none';
+  renderSitePhotoGrid();
+  showToast('✅', `${imgs.length} photo${imgs.length>1?'s':''} added to site archive`);
+}
+
+// ════════════════════════════════════════════════════════════
+// CLAUDE VISION API
+// ════════════════════════════════════════════════════════════
+let visionCurrentUrl = '';
+
+function openVisionModal(url, name) {
+  visionCurrentUrl = url;
+  document.getElementById('visionImg').src = url;
+  document.getElementById('visionQuestion').value = '';
+  document.getElementById('visionResult').style.display = 'none';
+  document.getElementById('visionResult').textContent = '';
+  document.getElementById('visionApiWarn').style.display = 'none';
+  document.getElementById('visionAnalyzeBtn').textContent = '🔍 Analyze Photo';
+  document.getElementById('visionAnalyzeBtn').disabled = false;
+  document.getElementById('visionModal').style.display = 'flex';
+}
+
+function setVisionQ(q) { document.getElementById('visionQuestion').value = q; }
+
+async function analyzePhoto() {
+  const question = document.getElementById('visionQuestion').value.trim() || 'Describe everything you can see in this photo in detail. Focus on HVAC equipment, construction, materials, and any issues.';
+  const btn = document.getElementById('visionAnalyzeBtn');
+  const resultEl = document.getElementById('visionResult');
+  const warnEl = document.getElementById('visionApiWarn');
+
+  if (!ANTHROPIC_API_KEY) {
+    warnEl.style.display = 'block';
+    warnEl.innerHTML = '⚠️ No Anthropic API key set. Open the app\'s source and paste your <code>sk-ant-...</code> key into <code>ANTHROPIC_API_KEY</code>.';
+    return;
+  }
+
+  btn.textContent = '⏳ Analyzing…';
+  btn.disabled = true;
+  resultEl.style.display = 'none';
+  warnEl.style.display = 'none';
+
+  // Fetch the image and convert to base64
+  let base64, mediaType;
+  try {
+    const resp = await fetch(visionCurrentUrl);
+    const blob = await resp.blob();
+    mediaType = blob.type || 'image/jpeg';
+    const buf = await blob.arrayBuffer();
+    base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+  } catch(e) {
+    btn.textContent = '🔍 Analyze Photo'; btn.disabled = false;
+    warnEl.style.display = 'block';
+    warnEl.textContent = 'Could not load the image for analysis. If it\'s a Firebase URL, ensure CORS is configured.';
+    return;
+  }
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'anthropic-dangerous-direct-browser-client': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1024,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+            { type: 'text', text: `You are an HVAC technician assistant reviewing jobsite photos for Avant Development Group, Austin TX. ${question}` }
+          ]
+        }]
+      })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    const answer = data.content?.[0]?.text || 'No response.';
+    resultEl.style.display = 'block';
+    resultEl.textContent = answer;
+  } catch(e) {
+    warnEl.style.display = 'block';
+    warnEl.textContent = 'API error: ' + e.message;
+  }
+
+  btn.textContent = '🔍 Analyze Again';
+  btn.disabled = false;
+}
+
+// ════════════════════════════════════════════════════════════
 // KEYBOARD
 // ════════════════════════════════════════════════════════════
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (document.getElementById('lightbox').classList.contains('open')) { closeLightbox(); return; }
-    const modals = ['logModal','scheduleModal','textModal'];
+    const modals = ['logModal','scheduleModal','textModal','clubhouseModal','sitePhotosModal','visionModal'];
     const open = modals.find(id => document.getElementById(id).style.display !== 'none');
     if (open) closeModal(open);
     else if (selectedId) closePanel();
