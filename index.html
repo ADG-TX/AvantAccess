@@ -277,6 +277,9 @@
       <button id="btnList" onclick="setView('list')" class="btn btn-gray" style="font-size:11px;padding:5px 12px">☰ List</button>
     </div>
 
+    <!-- AI Photo Search -->
+    <button onclick="openAIPhotoSearch()" class="btn btn-blue" style="font-size:11px;padding:5px 14px;flex-shrink:0;border-color:#2A5878;background:linear-gradient(135deg,#0E2A40,#1A3A50)" title="Search every photo in every unit using AI">🔍 AI Search</button>
+
     <!-- Site Photos -->
     <button onclick="openSitePhotos()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0" title="Jobsite photo archive — drag & drop to upload">📷 Site Photos</button>
 
@@ -633,6 +636,54 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════
+     MODAL: AI PHOTO SEARCH
+═══════════════════════════════════════════════ -->
+<div id="aiSearchModal" class="modal-wrap" style="display:none;align-items:flex-start;padding:0;overflow-y:auto" onclick="if(event.target===this)closeModal('aiSearchModal')">
+  <div style="background:#0C0E1A;width:100%;max-width:920px;min-height:100vh;margin:0 auto;padding:28px 24px;display:flex;flex-direction:column;gap:16px" onclick="event.stopPropagation()">
+
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <h2 style="font-size:22px;font-weight:900;color:#90C8F0;letter-spacing:.02em">🔍 AI Photo Search</h2>
+        <div style="font-size:12px;color:#5A6A8A;margin-top:3px">Search every photo across all units, Clubhouse &amp; Site Archive using Claude AI</div>
+      </div>
+      <button onclick="closeModal('aiSearchModal')" style="background:none;border:none;color:#7A8C6A;cursor:pointer;font-size:26px;line-height:1;padding:4px">×</button>
+    </div>
+
+    <!-- Search bar -->
+    <div style="display:flex;gap:8px">
+      <div style="position:relative;flex:1">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#7A8C6A" stroke-width="2.5" style="position:absolute;left:12px;top:50%;transform:translateY(-50%)"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="m21 21-4.35-4.35"/></svg>
+        <input id="aiSearchInput" type="text" placeholder='Search anything — "aluminum framing", "white Ferrari", "copper pipes", "Mitsubishi", "exposed wiring"…' style="padding-left:38px;font-size:14px;padding-top:12px;padding-bottom:12px" onkeydown="if(event.key==='Enter')performPhotoSearch()">
+      </div>
+      <button class="btn btn-blue" style="font-size:13px;padding:10px 22px;flex-shrink:0" onclick="performPhotoSearch()">Search</button>
+    </div>
+
+    <!-- Index status bar -->
+    <div style="display:flex;align-items:center;justify-content:space-between;background:#060810;border:1px solid #1E2840;border-radius:8px;padding:10px 16px;gap:12px;flex-wrap:wrap">
+      <div style="font-size:12px;color:#7A8C6A" id="aiIndexStatus">Loading…</div>
+      <div style="display:flex;gap:8px;flex-shrink:0">
+        <button class="btn btn-gray" style="font-size:11px" id="aiIndexBtn" onclick="indexAllPhotos()">⚡ Index All Photos</button>
+        <button class="btn btn-gray" style="font-size:11px;opacity:.6" onclick="promptApiKey()">🔑 Set API Key</button>
+      </div>
+    </div>
+    <div id="aiIndexProgress" style="display:none;font-size:12px;color:#C4A26A;font-weight:700;text-align:center;padding:2px 0;background:#0A0C18;border-radius:6px;border:1px solid #1E2840;padding:8px"></div>
+
+    <!-- Results area -->
+    <div id="aiSearchResults">
+      <div style="text-align:center;padding:80px 16px;color:#4D5C3D">
+        <div style="font-size:56px;margin-bottom:16px">🔍</div>
+        <div style="font-size:17px;font-weight:700;color:#7A8C6A">Type anything to search all photos</div>
+        <div style="font-size:12px;margin-top:8px;color:#4D5C3D;line-height:1.8">
+          white car &nbsp;·&nbsp; aluminum framing &nbsp;·&nbsp; copper pipes &nbsp;·&nbsp; Ferrari &nbsp;·&nbsp; exposed wiring<br>
+          Mitsubishi &nbsp;·&nbsp; concrete floor &nbsp;·&nbsp; drain line &nbsp;·&nbsp; insulation &nbsp;·&nbsp; garage number
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
      MODAL: CLAUDE VISION
 ═══════════════════════════════════════════════ -->
 <div id="visionModal" class="modal-wrap" style="display:none" onclick="if(event.target===this)closeModal('visionModal')">
@@ -800,8 +851,8 @@ const selectedUnits = new Set();
 let CLUBHOUSE = { notes:'', photos:[], mainPhotoUrl:'', mainPhotoName:'' };
 let SITE_PHOTOS = [];
 
-// ── Claude Vision API key (set this once you have your Anthropic API key) ──
-const ANTHROPIC_API_KEY = '';  // paste your sk-ant-... key here
+// ── Anthropic API key — paste once, stored for the session ──
+let ANTHROPIC_API_KEY = sessionStorage.getItem('anthropic_key') || '';
 
 // ════════════════════════════════════════════════════════════
 // INIT
@@ -1659,9 +1710,11 @@ function uploadQueue(files, index, unitId) {
         const url = await task.snapshot.ref.getDownloadURL();
         const u = DATA[unitId];
         if (!u.photos) u.photos = [];
+        const newIdx = u.photos.length;
         u.photos.push({ url, name: file.name, path, date: toISO(new Date()) });
         persist(unitId);
         renderPhotoGrid();
+        indexSinglePhoto('unit', unitId, newIdx);
       } catch(e) {
         console.error('getDownloadURL error:', e);
       }
@@ -2623,7 +2676,9 @@ async function uploadClubhouseFiles(files) {
       } catch(e) { console.error('Upload error:', e); }
     }
     if (!CLUBHOUSE.photos) CLUBHOUSE.photos = [];
+    const cidx = CLUBHOUSE.photos.length;
     CLUBHOUSE.photos.push({ url, name: file.name, storagePath: path, uploadedAt: new Date().toISOString() });
+    indexSinglePhoto('clubhouse', null, cidx);
   }
   persistClubhouse();
   renderClubhouseGrid();
@@ -2708,12 +2763,241 @@ async function uploadSiteFiles(files) {
         url = await ref.getDownloadURL();
       } catch(e) { console.error('Site photo upload error:', e); }
     }
+    const sidx = SITE_PHOTOS.length;
     SITE_PHOTOS.push({ url, name: file.name, storagePath: path, uploadedAt: new Date().toISOString() });
+    indexSinglePhoto('site', null, sidx);
   }
   persistSitePhotos();
   prog.style.display = 'none';
   renderSitePhotoGrid();
   showToast('✅', `${imgs.length} photo${imgs.length>1?'s':''} added to site archive`);
+}
+
+// ════════════════════════════════════════════════════════════
+// AI PHOTO SEARCH ENGINE
+// ════════════════════════════════════════════════════════════
+let indexingActive = false;
+
+// Decode image URL → base64 string
+async function blobToBase64Data(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Call Claude Haiku to generate a dense keyword description of an image
+async function claudeDescribeImage(imageUrl) {
+  const key = ANTHROPIC_API_KEY;
+  if (!key) return '';
+  let base64, mediaType;
+  try {
+    const resp = await fetch(imageUrl);
+    const blob = await resp.blob();
+    mediaType = (blob.type && blob.type.startsWith('image/')) ? blob.type : 'image/jpeg';
+    base64 = await blobToBase64Data(blob);
+  } catch(e) { return 'fetch_failed'; }
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'anthropic-dangerous-direct-browser-client': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        messages: [{ role:'user', content: [
+          { type:'image', source:{ type:'base64', media_type:mediaType, data:base64 } },
+          { type:'text', text:'List every distinct object, material, color, brand, vehicle make/model, tool, equipment, text/number, and feature visible in this photo. Be exhaustive. Format: dense comma-separated keywords and short phrases only. Include: vehicle makes/colors/models, materials (aluminum, copper, PVC, drywall, concrete, steel), HVAC brands/models, colors, numbers, structural elements, tools, hardware, people/clothing. Output ONLY the keyword list.' }
+        ]}]
+      })
+    });
+    const data = await res.json();
+    if (data.error) { console.warn('Claude index error:', data.error.message); return ''; }
+    return data.content?.[0]?.text || '';
+  } catch(e) { console.warn('claudeDescribeImage failed:', e); return ''; }
+}
+
+// Index a single photo silently in the background after upload
+async function indexSinglePhoto(type, unitId, idx) {
+  if (!ANTHROPIC_API_KEY) return;
+  await new Promise(r => setTimeout(r, 500)); // small delay so upload finishes
+  let photo;
+  if (type === 'unit') photo = DATA[unitId]?.photos?.[idx];
+  else if (type === 'clubhouse') photo = CLUBHOUSE.photos?.[idx];
+  else photo = SITE_PHOTOS?.[idx];
+  if (!photo || photo.aiDescription) return;
+  const desc = await claudeDescribeImage(photo.url);
+  if (!desc || desc === 'fetch_failed') return;
+  photo.aiDescription = desc;
+  if (type === 'unit') persist(unitId);
+  else if (type === 'clubhouse') persistClubhouse();
+  else persistSitePhotos();
+}
+
+function getIndexStats() {
+  let total = 0, indexed = 0;
+  Object.values(DATA).forEach(u => (u.photos||[]).forEach(p => { total++; if (p.aiDescription) indexed++; }));
+  (CLUBHOUSE.photos||[]).forEach(p => { total++; if (p.aiDescription) indexed++; });
+  SITE_PHOTOS.forEach(p => { total++; if (p.aiDescription) indexed++; });
+  return { total, indexed };
+}
+
+function updateIndexStatus() {
+  const el = document.getElementById('aiIndexStatus');
+  if (!el) return;
+  if (!ANTHROPIC_API_KEY) {
+    el.innerHTML = '⚠️ No API key — click <b style="color:#C4A26A">Set API Key</b> to enable AI search';
+    return;
+  }
+  const { total, indexed } = getIndexStats();
+  if (total === 0) { el.textContent = 'No photos uploaded yet. Upload photos to get started.'; return; }
+  const pct = Math.round((indexed/total)*100);
+  el.innerHTML = `<span style="color:${indexed===total?'#A8D878':'#fbbf24'}">${indexed} / ${total} photos indexed</span> ${indexed<total ? `<span style="color:#4D5C3D">· ${total-indexed} pending — click Index All to scan remaining</span>` : '<span style="color:#A8D878">· ✅ All indexed</span>'}`;
+}
+
+async function indexAllPhotos() {
+  if (!ANTHROPIC_API_KEY) { promptApiKey(); return; }
+  if (indexingActive) return;
+  indexingActive = true;
+  const btn = document.getElementById('aiIndexBtn');
+  const prog = document.getElementById('aiIndexProgress');
+  if (btn) { btn.textContent = '⏹ Stop Indexing'; btn.onclick = () => { indexingActive = false; }; }
+  if (prog) prog.style.display = 'block';
+
+  // Gather all unindexed photos
+  const tasks = [];
+  Object.values(DATA).forEach(u => (u.photos||[]).forEach((p,i) => { if (!p.aiDescription) tasks.push({ type:'unit', unitId:u.id, idx:i, photo:p }); }));
+  (CLUBHOUSE.photos||[]).forEach((p,i) => { if (!p.aiDescription) tasks.push({ type:'clubhouse', idx:i, photo:p }); });
+  SITE_PHOTOS.forEach((p,i) => { if (!p.aiDescription) tasks.push({ type:'site', idx:i, photo:p }); });
+
+  if (!tasks.length) {
+    if (prog) { prog.textContent = '✅ All photos are already indexed!'; setTimeout(() => { prog.style.display='none'; }, 3000); }
+    indexingActive = false;
+    if (btn) { btn.textContent = '⚡ Index All Photos'; btn.onclick = indexAllPhotos; }
+    return;
+  }
+
+  let done = 0;
+  for (const task of tasks) {
+    if (!indexingActive) break;
+    if (prog) prog.textContent = `⏳ Indexing photo ${done+1} of ${tasks.length}: "${task.photo.name}"…`;
+    const desc = await claudeDescribeImage(task.photo.url);
+    if (desc && desc !== 'fetch_failed') {
+      task.photo.aiDescription = desc;
+      if (task.type === 'unit') persist(task.unitId);
+      else if (task.type === 'clubhouse') persistClubhouse();
+      else persistSitePhotos();
+    }
+    done++;
+    updateIndexStatus();
+    await new Promise(r => setTimeout(r, 200));
+  }
+
+  if (prog) { prog.textContent = indexingActive ? `✅ Done — ${done} photo${done!==1?'s':''} indexed!` : `⏹ Stopped after ${done} photo${done!==1?'s':''}`; setTimeout(() => { prog.style.display='none'; }, 5000); }
+  indexingActive = false;
+  if (btn) { btn.textContent = '⚡ Index All Photos'; btn.onclick = indexAllPhotos; }
+  updateIndexStatus();
+}
+
+function openAIPhotoSearch() {
+  document.getElementById('aiSearchModal').style.display = 'flex';
+  document.getElementById('aiSearchInput').value = '';
+  document.getElementById('aiSearchResults').innerHTML = `
+    <div style="text-align:center;padding:80px 16px;color:#4D5C3D">
+      <div style="font-size:56px;margin-bottom:16px">🔍</div>
+      <div style="font-size:17px;font-weight:700;color:#7A8C6A">Type anything to search all photos</div>
+      <div style="font-size:12px;margin-top:8px;color:#4D5C3D;line-height:1.8">white car &nbsp;·&nbsp; aluminum framing &nbsp;·&nbsp; copper pipes &nbsp;·&nbsp; Ferrari &nbsp;·&nbsp; exposed wiring<br>Mitsubishi &nbsp;·&nbsp; concrete floor &nbsp;·&nbsp; drain line &nbsp;·&nbsp; insulation &nbsp;·&nbsp; garage number</div>
+    </div>`;
+  updateIndexStatus();
+  requestAnimationFrame(() => document.getElementById('aiSearchInput')?.focus());
+}
+
+function performPhotoSearch() {
+  const q = (document.getElementById('aiSearchInput').value || '').trim();
+  if (!q) return;
+  const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+  function matches(p) {
+    const haystack = ((p.aiDescription||'') + ' ' + (p.name||'')).toLowerCase();
+    return terms.some(t => haystack.includes(t));
+  }
+  const results = [];
+  Object.values(DATA).forEach(u => (u.photos||[]).forEach((p,i) => {
+    if (matches(p)) results.push({ type:'unit', unitId:u.id, building:u.building, ownerName:u.ownerName, status:u.status, photo:p, idx:i });
+  }));
+  (CLUBHOUSE.photos||[]).forEach((p,i) => { if (matches(p)) results.push({ type:'clubhouse', building:'Clubhouse', ownerName:'', status:'good', photo:p, idx:i }); });
+  SITE_PHOTOS.forEach((p,i) => { if (matches(p)) results.push({ type:'site', building:'Site Archive', ownerName:'', status:'unconfigured', photo:p, idx:i }); });
+  renderSearchResults(results, q);
+}
+
+const STATUS_COLORS = { good:'#A8D878', due:'#fbbf24', overdue:'#F5A5A0', unconfigured:'#5A7090', not_ready:'#8898B0' };
+
+function renderSearchResults(results, query) {
+  const el = document.getElementById('aiSearchResults');
+  if (!results.length) {
+    const { total, indexed } = getIndexStats();
+    el.innerHTML = `<div style="text-align:center;padding:60px 16px">
+      <div style="font-size:36px;margin-bottom:12px">🔎</div>
+      <div style="font-size:15px;font-weight:600;color:#7A8C6A">No photos matched "${escHtml(query)}"</div>
+      <div style="font-size:12px;margin-top:8px;color:#4D5C3D;line-height:1.7">${indexed < total ? `Only ${indexed} of ${total} photos are indexed.<br>Click <b style="color:#C4A26A">⚡ Index All Photos</b> to scan the rest.` : 'All '+total+' photos were searched. Try different keywords.'}</div>
+    </div>`;
+    return;
+  }
+  el.innerHTML = `
+    <div style="font-size:11px;font-weight:700;color:#7A8C6A;text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px">${results.length} photo${results.length!==1?'s':''} matched "${escHtml(query)}"</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:12px">
+      ${results.map((r,ri) => `
+        <div onclick="selectSearchResult(${ri})" data-sri="${ri}"
+          style="background:#0A0C18;border:1px solid #1A2438;border-radius:10px;overflow:hidden;cursor:pointer;transition:border-color .15s,transform .12s"
+          onmouseenter="this.style.borderColor='#C4A26A';this.style.transform='translateY(-2px)'"
+          onmouseleave="this.style.borderColor='#1A2438';this.style.transform='translateY(0)'">
+          <div style="position:relative">
+            <img src="${escAttr(r.photo.url)}" style="width:100%;height:125px;object-fit:cover;display:block">
+            <div style="position:absolute;top:6px;left:6px;background:rgba(0,0,0,.8);border-radius:5px;padding:2px 8px;font-size:11px;font-weight:800;color:${STATUS_COLORS[r.status]||'#F5EDD8'}">
+              ${r.type==='unit' ? '#'+r.unitId : escHtml(r.building)}
+            </div>
+          </div>
+          <div style="padding:9px 10px">
+            <div style="font-size:12px;font-weight:700;color:#DDD5B8">${r.type==='unit' ? 'Unit #'+r.unitId : escHtml(r.building)}</div>
+            ${r.type==='unit' && r.building ? `<div style="font-size:10px;color:#7A8C6A">${escHtml(r.building)}</div>` : ''}
+            ${r.ownerName ? `<div style="font-size:10px;color:#5A6A5A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(r.ownerName)}</div>` : ''}
+            <div style="font-size:9px;color:#3A4A5A;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.photo.name)}</div>
+          </div>
+        </div>`).join('')}
+    </div>`;
+  // Store results for click handler
+  window._searchResults = results;
+}
+
+function selectSearchResult(ri) {
+  const r = (window._searchResults||[])[ri];
+  if (!r) return;
+  closeModal('aiSearchModal');
+  if (r.type === 'unit') {
+    openUnit(r.unitId);
+    requestAnimationFrame(() => switchTab('photos'));
+  } else if (r.type === 'clubhouse') {
+    openClubhouse();
+  } else {
+    openLightbox(r.photo.url, r.photo.name);
+  }
+}
+
+function promptApiKey() {
+  const key = prompt('Paste your Anthropic API key (sk-ant-…):');
+  if (key && key.trim().startsWith('sk-')) {
+    ANTHROPIC_API_KEY = key.trim();
+    sessionStorage.setItem('anthropic_key', ANTHROPIC_API_KEY);
+    updateIndexStatus();
+    showToast('🔑', 'API key saved — ready to index photos');
+  } else if (key !== null) {
+    showToast('⚠️', 'That doesn\'t look like a valid key (should start with sk-ant-)');
+  }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -2808,7 +3092,7 @@ async function analyzePhoto() {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (document.getElementById('lightbox').classList.contains('open')) { closeLightbox(); return; }
-    const modals = ['logModal','scheduleModal','textModal','clubhouseModal','sitePhotosModal','visionModal'];
+    const modals = ['logModal','scheduleModal','textModal','clubhouseModal','sitePhotosModal','visionModal','aiSearchModal'];
     const open = modals.find(id => document.getElementById(id).style.display !== 'none');
     if (open) closeModal(open);
     else if (selectedId) closePanel();
