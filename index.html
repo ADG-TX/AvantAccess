@@ -852,7 +852,7 @@ let CLUBHOUSE = { notes:'', photos:[], mainPhotoUrl:'', mainPhotoName:'' };
 let SITE_PHOTOS = [];
 
 // ── Anthropic API key — paste once, stored for the session ──
-let ANTHROPIC_API_KEY = sessionStorage.getItem('anthropic_key') || '';
+let ANTHROPIC_API_KEY = localStorage.getItem('anthropic_key') || '';
 
 // ════════════════════════════════════════════════════════════
 // INIT
@@ -2992,7 +2992,7 @@ function promptApiKey() {
   const key = prompt('Paste your Anthropic API key (sk-ant-…):');
   if (key && key.trim().startsWith('sk-')) {
     ANTHROPIC_API_KEY = key.trim();
-    sessionStorage.setItem('anthropic_key', ANTHROPIC_API_KEY);
+    localStorage.setItem('anthropic_key', ANTHROPIC_API_KEY);
     updateIndexStatus();
     showToast('🔑', 'API key saved — ready to index photos');
   } else if (key !== null) {
