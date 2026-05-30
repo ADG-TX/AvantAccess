@@ -2569,14 +2569,20 @@ function showMicroSave() {
 // CLUBHOUSE
 // ════════════════════════════════════════════════════════════
 async function loadClubhouse() {
+  const local = localStorage.getItem('gota_clubhouse');
+  if (local) { try { CLUBHOUSE = Object.assign({ notes:'', photos:[], mainPhotoUrl:'', mainPhotoName:'' }, JSON.parse(local)); } catch(e) {} }
   if (!firestoreReady) return;
   try {
     const doc = await db.collection('properties').doc('clubhouse').get();
-    if (doc.exists) CLUBHOUSE = Object.assign({ notes:'', photos:[], mainPhotoUrl:'', mainPhotoName:'' }, doc.data());
-  } catch(e) { console.warn('Clubhouse load failed:', e); }
+    if (doc.exists) {
+      CLUBHOUSE = Object.assign({ notes:'', photos:[], mainPhotoUrl:'', mainPhotoName:'' }, doc.data());
+      localStorage.setItem('gota_clubhouse', JSON.stringify(CLUBHOUSE));
+    }
+  } catch(e) { console.warn('Clubhouse load failed, using local cache:', e); }
 }
 
 function persistClubhouse() {
+  localStorage.setItem('gota_clubhouse', JSON.stringify(CLUBHOUSE));
   if (!firestoreReady) return;
   db.collection('properties').doc('clubhouse').set(CLUBHOUSE).catch(e => console.error('Clubhouse save error:', e));
 }
@@ -2664,39 +2670,51 @@ function handleClubFileInput(input) { uploadClubhouseFiles([...input.files]); in
 async function uploadClubhouseFiles(files) {
   const imgs = files.filter(f => f.type.startsWith('image/'));
   if (!imgs.length) return;
-  showToast('⬆️', `Uploading ${imgs.length} photo${imgs.length>1?'s':''}…`);
+  if (!firebaseReady || !storage) {
+    showToast('❌', 'Firebase not connected — photos cannot be saved.');
+    return;
+  }
+  if (!CLUBHOUSE.photos) CLUBHOUSE.photos = [];
+  let successCount = 0;
   for (const file of imgs) {
     const path = `clubhouse/photos/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
-    let url = URL.createObjectURL(file);
-    if (firebaseReady && storage) {
-      try {
-        const ref = storage.ref(path);
-        await ref.put(file);
-        url = await ref.getDownloadURL();
-      } catch(e) { console.error('Upload error:', e); }
+    try {
+      const ref = storage.ref(path);
+      await ref.put(file);
+      const url = await ref.getDownloadURL();
+      const cidx = CLUBHOUSE.photos.length;
+      CLUBHOUSE.photos.push({ url, name: file.name, storagePath: path, uploadedAt: new Date().toISOString() });
+      persistClubhouse(); // save after every photo
+      renderClubhouseGrid();
+      indexSinglePhoto('clubhouse', null, cidx);
+      successCount++;
+    } catch(e) {
+      console.error('Clubhouse upload error:', e);
+      showToast('❌', `Failed to upload ${file.name}`);
     }
-    if (!CLUBHOUSE.photos) CLUBHOUSE.photos = [];
-    const cidx = CLUBHOUSE.photos.length;
-    CLUBHOUSE.photos.push({ url, name: file.name, storagePath: path, uploadedAt: new Date().toISOString() });
-    indexSinglePhoto('clubhouse', null, cidx);
   }
-  persistClubhouse();
-  renderClubhouseGrid();
-  showToast('✅', `${imgs.length} photo${imgs.length>1?'s':''} added to Clubhouse`);
+  if (successCount > 0) showToast('✅', `${successCount} photo${successCount>1?'s':''} added to Clubhouse`);
 }
 
 // ════════════════════════════════════════════════════════════
 // SITE PHOTOS (Jobsite Archive)
 // ════════════════════════════════════════════════════════════
 async function loadSitePhotos() {
+  // localStorage first (instant, survives Firestore outages)
+  const local = localStorage.getItem('gota_site_photos');
+  if (local) { try { SITE_PHOTOS = JSON.parse(local); } catch(e) {} }
   if (!firestoreReady) return;
   try {
     const doc = await db.collection('properties').doc('sitePhotos').get();
-    if (doc.exists && doc.data().photos) SITE_PHOTOS = doc.data().photos;
-  } catch(e) { console.warn('Site photos load failed:', e); }
+    if (doc.exists && doc.data().photos) {
+      SITE_PHOTOS = doc.data().photos;
+      localStorage.setItem('gota_site_photos', JSON.stringify(SITE_PHOTOS));
+    }
+  } catch(e) { console.warn('Site photos load failed, using local cache:', e); }
 }
 
 function persistSitePhotos() {
+  localStorage.setItem('gota_site_photos', JSON.stringify(SITE_PHOTOS));
   if (!firestoreReady) return;
   db.collection('properties').doc('sitePhotos').set({ photos: SITE_PHOTOS }).catch(e => console.error('Site photos save error:', e));
 }
@@ -2749,28 +2767,34 @@ function handleSiteFileInput(input) { uploadSiteFiles([...input.files]); input.v
 async function uploadSiteFiles(files) {
   const imgs = files.filter(f => f.type.startsWith('image/'));
   if (!imgs.length) return;
+  if (!firebaseReady || !storage) {
+    showToast('❌', 'Firebase not connected — photos cannot be saved. Check your connection.');
+    return;
+  }
   const prog = document.getElementById('siteUploadProgress');
   prog.style.display = 'block';
+  let successCount = 0;
   for (let i = 0; i < imgs.length; i++) {
     const file = imgs[i];
     prog.textContent = `Uploading ${i+1} of ${imgs.length}: ${file.name}…`;
     const path = `jobsite/photos/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
-    let url = URL.createObjectURL(file);
-    if (firebaseReady && storage) {
-      try {
-        const ref = storage.ref(path);
-        await ref.put(file);
-        url = await ref.getDownloadURL();
-      } catch(e) { console.error('Site photo upload error:', e); }
+    try {
+      const ref = storage.ref(path);
+      await ref.put(file);
+      const url = await ref.getDownloadURL();
+      const sidx = SITE_PHOTOS.length;
+      SITE_PHOTOS.push({ url, name: file.name, storagePath: path, uploadedAt: new Date().toISOString() });
+      persistSitePhotos(); // save after every photo so a partial upload is never lost
+      renderSitePhotoGrid();
+      indexSinglePhoto('site', null, sidx);
+      successCount++;
+    } catch(e) {
+      console.error('Site photo upload error:', e);
+      showToast('❌', `Failed to upload ${file.name} — check Firebase Storage rules`);
     }
-    const sidx = SITE_PHOTOS.length;
-    SITE_PHOTOS.push({ url, name: file.name, storagePath: path, uploadedAt: new Date().toISOString() });
-    indexSinglePhoto('site', null, sidx);
   }
-  persistSitePhotos();
   prog.style.display = 'none';
-  renderSitePhotoGrid();
-  showToast('✅', `${imgs.length} photo${imgs.length>1?'s':''} added to site archive`);
+  if (successCount > 0) showToast('✅', `${successCount} photo${successCount>1?'s':''} saved to site archive`);
 }
 
 // ════════════════════════════════════════════════════════════
