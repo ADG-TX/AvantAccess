@@ -955,6 +955,7 @@ async function syncToFirestore() {
     // Firestore batch limit is 500 writes; with 152 units we're well under
     const batch = db.batch();
     Object.values(DATA).forEach(u => {
+      if (!u.id || String(u.id).startsWith('__')) return; // skip reserved/special keys
       batch.set(db.collection('units').doc(String(u.id)), u);
     });
     await batch.commit();
