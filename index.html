@@ -286,8 +286,6 @@
     <!-- Multi-select -->
     <button id="btnMultiSelect" onclick="toggleMultiSelect()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0" title="Select multiple units to bulk-schedule a job">☑ Select Units</button>
 
-    <!-- Reset -->
-    <button onclick="confirmReset()" class="btn btn-gray" style="font-size:10px;padding:4px 10px;opacity:.5" title="Reset all data">↺ Reset</button>
 
     <!-- Logout -->
     <button onclick="handleLogout()" class="btn btn-gray" style="font-size:10px;padding:4px 10px;opacity:.6" title="Sign out"><span id="userBadge" style="margin-right:5px;color:#7A8C6A"></span>⎋ Sign Out</button>
@@ -869,6 +867,8 @@ async function init() {
         snapshot.forEach(doc => {
           const d = doc.data();
           if (!d.photos) d.photos = [];
+          d.photos = d.photos.filter(p => isValidStorageUrl(p.url));
+          if (d.mainPhotoUrl && !isValidStorageUrl(d.mainPhotoUrl)) { d.mainPhotoUrl = ''; d.mainPhotoName = ''; }
           if (!d.serviceHistory) d.serviceHistory = [];
           if (!d.condenser) d.condenser = { model:'', serial:'', installDate:'', warrantyExpires:'', refrigerant:'' };
           if (!d.headUnits) d.headUnits = [];
@@ -904,7 +904,12 @@ async function init() {
   const saved = localStorage.getItem('gota_hvac_v2');
   if (saved) {
     DATA = JSON.parse(saved);
-    Object.values(DATA).forEach(u => { if (!u.photos) u.photos = []; });
+    Object.values(DATA).forEach(u => {
+      if (!u.photos) u.photos = [];
+      // Strip any blob URLs that survived from a previous bad session
+      u.photos = u.photos.filter(p => isValidStorageUrl(p.url));
+      if (u.mainPhotoUrl && !isValidStorageUrl(u.mainPhotoUrl)) { u.mainPhotoUrl = ''; u.mainPhotoName = ''; }
+    });
   } else {
     buildDefaults();
   }
@@ -2569,23 +2574,32 @@ function showMicroSave() {
 // ════════════════════════════════════════════════════════════
 // CLUBHOUSE
 // ════════════════════════════════════════════════════════════
+function scrubClubhouse(data) {
+  const c = Object.assign({ notes:'', photos:[], mainPhotoUrl:'', mainPhotoName:'' }, data);
+  c.photos = (c.photos || []).filter(p => isValidStorageUrl(p.url));
+  if (!isValidStorageUrl(c.mainPhotoUrl)) { c.mainPhotoUrl = ''; c.mainPhotoName = ''; }
+  return c;
+}
+
 async function loadClubhouse() {
   const local = localStorage.getItem('gota_clubhouse');
-  if (local) { try { CLUBHOUSE = Object.assign({ notes:'', photos:[], mainPhotoUrl:'', mainPhotoName:'' }, JSON.parse(local)); } catch(e) {} }
+  if (local) { try { CLUBHOUSE = scrubClubhouse(JSON.parse(local)); } catch(e) {} }
   if (!firestoreReady) return;
   try {
     const doc = await db.collection('properties').doc('clubhouse').get();
     if (doc.exists) {
-      CLUBHOUSE = Object.assign({ notes:'', photos:[], mainPhotoUrl:'', mainPhotoName:'' }, doc.data());
+      CLUBHOUSE = scrubClubhouse(doc.data());
       localStorage.setItem('gota_clubhouse', JSON.stringify(CLUBHOUSE));
     }
   } catch(e) { console.warn('Clubhouse load failed, using local cache:', e); }
 }
 
 function persistClubhouse() {
-  localStorage.setItem('gota_clubhouse', JSON.stringify(CLUBHOUSE));
+  const safe = scrubClubhouse(CLUBHOUSE);
+  CLUBHOUSE = safe;
+  localStorage.setItem('gota_clubhouse', JSON.stringify(safe));
   if (!firestoreReady) return;
-  db.collection('properties').doc('clubhouse').set(CLUBHOUSE).catch(e => console.error('Clubhouse save error:', e));
+  db.collection('properties').doc('clubhouse').set(safe).catch(e => console.error('Clubhouse save error:', e));
 }
 
 function openClubhouse() {
@@ -2703,21 +2717,23 @@ async function uploadClubhouseFiles(files) {
 async function loadSitePhotos() {
   // localStorage first (instant, survives Firestore outages)
   const local = localStorage.getItem('gota_site_photos');
-  if (local) { try { SITE_PHOTOS = JSON.parse(local); } catch(e) {} }
+  if (local) { try { SITE_PHOTOS = JSON.parse(local).filter(p => isValidStorageUrl(p.url)); } catch(e) {} }
   if (!firestoreReady) return;
   try {
     const doc = await db.collection('properties').doc('sitePhotos').get();
     if (doc.exists && doc.data().photos) {
-      SITE_PHOTOS = doc.data().photos;
+      SITE_PHOTOS = doc.data().photos.filter(p => isValidStorageUrl(p.url));
       localStorage.setItem('gota_site_photos', JSON.stringify(SITE_PHOTOS));
     }
   } catch(e) { console.warn('Site photos load failed, using local cache:', e); }
 }
 
 function persistSitePhotos() {
-  localStorage.setItem('gota_site_photos', JSON.stringify(SITE_PHOTOS));
+  const safe = SITE_PHOTOS.filter(p => isValidStorageUrl(p.url));
+  SITE_PHOTOS = safe;
+  localStorage.setItem('gota_site_photos', JSON.stringify(safe));
   if (!firestoreReady) return;
-  db.collection('properties').doc('sitePhotos').set({ photos: SITE_PHOTOS }).catch(e => console.error('Site photos save error:', e));
+  db.collection('properties').doc('sitePhotos').set({ photos: safe }).catch(e => console.error('Site photos save error:', e));
 }
 
 function openSitePhotos() {
@@ -2756,6 +2772,11 @@ async function deleteSitePhoto(idx) {
   SITE_PHOTOS.splice(idx, 1);
   persistSitePhotos();
   renderSitePhotoGrid();
+}
+
+// Returns true only for permanent Firebase Storage HTTPS URLs — never blob: or empty
+function isValidStorageUrl(url) {
+  return typeof url === 'string' && url.startsWith('https://');
 }
 
 function handleSiteDrop(e) {
