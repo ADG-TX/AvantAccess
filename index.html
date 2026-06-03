@@ -3643,5 +3643,398 @@ if (authReady) {
   if (warn) { warn.style.display = 'block'; warn.textContent = 'Offline mode — cloud sync and login are unavailable.'; }
   init();
 }
+
+// ════════════════════════════════════════════════════════════
+// DESIGN PLANS — PIN-PROTECTED SECTION
+// ════════════════════════════════════════════════════════════
+const DESIGN_PIN = '1021';
+let designUnlocked = false;
+let DESIGN_PLANS = [];
+
+const ROUTE_COLORS = { copper:'#EF4444', plumbing:'#3B82F6', communication:'#22C55E', power:'#F59E0B' };
+let ROUTE_STATE = { system:'copper', tool:'pencil', lineWidth:3, drawing:false, startX:0, startY:0, lastX:0, lastY:0, history:[], tempSnapshot:null };
+
+function openDesignPlans() {
+  if (!designUnlocked) {
+    document.getElementById('designPinInput').value = '';
+    document.getElementById('designPinError').style.display = 'none';
+    document.getElementById('designPinModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('designPinInput').focus(), 100);
+  } else {
+    _showDesignModal();
+  }
+}
+
+function checkDesignPin() {
+  if (document.getElementById('designPinInput').value.trim() === DESIGN_PIN) {
+    designUnlocked = true;
+    closeModal('designPinModal');
+    _showDesignModal();
+  } else {
+    document.getElementById('designPinError').style.display = 'block';
+    document.getElementById('designPinInput').value = '';
+    document.getElementById('designPinInput').focus();
+  }
+}
+
+function _showDesignModal() {
+  document.getElementById('designPlansModal').style.display = 'flex';
+  switchDesignTab('plans');
+  loadDesignPlans();
+}
+
+function switchDesignTab(tab) {
+  ['plans','analyze','route'].forEach(t => {
+    document.getElementById('dpPanel-' + t).style.display = t === tab ? 'block' : 'none';
+    const b = document.getElementById('dpTab-' + t);
+    b.style.background = t === tab ? '#1A2438' : '#0A0C18';
+    b.style.color      = t === tab ? '#C4A26A'  : '#5A6A8A';
+    b.style.border     = '1px solid ' + (t === tab ? '#C4A26A' : '#1A2438');
+    b.style.borderBottom = 'none';
+  });
+  if (tab === 'route') setTimeout(initRouteCanvas, 50);
+  if (tab === 'analyze') populateDesignSelects();
+}
+
+// ── Persist / load ───────────────────────────────────────────────────────────
+
+function persistDesignPlans() {
+  const safe = DESIGN_PLANS.filter(p => isValidStorageUrl(p.url));
+  DESIGN_PLANS = safe;
+  localStorage.setItem('gota_design_plans', JSON.stringify(safe));
+  if (!firestoreReady) return;
+  db.collection('properties').doc('designPlans').set({ plans: safe })
+    .catch(e => console.error('Design plans save error:', e));
+}
+
+async function loadDesignPlans() {
+  const local = localStorage.getItem('gota_design_plans');
+  if (local) { try { DESIGN_PLANS = JSON.parse(local).filter(p => isValidStorageUrl(p.url)); } catch(e) {} }
+  if (firestoreReady) {
+    try {
+      const doc = await db.collection('properties').doc('designPlans').get();
+      if (doc.exists && doc.data().plans) {
+        DESIGN_PLANS = doc.data().plans.filter(p => isValidStorageUrl(p.url));
+        localStorage.setItem('gota_design_plans', JSON.stringify(DESIGN_PLANS));
+      }
+    } catch(e) {}
+  }
+  renderDesignGrid();
+  populateDesignSelects();
+}
+
+function renderDesignGrid() {
+  const grid  = document.getElementById('designPlansGrid');
+  const count = document.getElementById('designPlanCount');
+  if (!grid) return;
+  count.textContent = DESIGN_PLANS.length + ' plan' + (DESIGN_PLANS.length !== 1 ? 's' : '');
+  if (!DESIGN_PLANS.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:36px;color:#3A4A6A;font-size:13px">No plans uploaded yet — drag PDFs or images above</div>';
+    return;
+  }
+  grid.innerHTML = DESIGN_PLANS.map((p, i) => {
+    const isImg = p.type && p.type.startsWith('image/');
+    const preview = isImg
+      ? '<img src="' + escAttr(p.url) + '" style="width:100%;height:130px;object-fit:cover;display:block">'
+      : '<div style="width:100%;height:130px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#060810;color:#C4A26A"><div style="font-size:40px">📄</div><div style="font-size:10px;color:#5A6A8A;margin-top:6px">PDF</div></div>';
+    return '<div style="border:1px solid #1A2438;border-radius:8px;overflow:hidden;background:#0A0C18">'
+      + preview
+      + '<div style="padding:8px">'
+      + '<div style="font-size:10px;color:#7A8C6A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:6px" title="' + escAttr(p.name) + '">' + escHtml(p.name) + '</div>'
+      + '<div style="display:flex;gap:4px;flex-wrap:wrap">'
+      + '<button onclick="window.open(\'' + escAttr(p.url) + '\',\'_blank\')" style="font-size:9px;padding:3px 7px;background:#0A1428;border:1px solid #1E3A5A;color:#90C8F0;border-radius:4px;cursor:pointer">👁 View</button>'
+      + '<button onclick="switchDesignTab(\'analyze\');document.getElementById(\'designAnalyzeSelect\').value=\'' + i + '\'" style="font-size:9px;padding:3px 7px;background:#0A1428;border:1px solid #1E3A5A;color:#90C8F0;border-radius:4px;cursor:pointer">🤖 Analyze</button>'
+      + '<button onclick="loadBgFromPlan(' + i + ')" style="font-size:9px;padding:3px 7px;background:#0A1428;border:1px solid #1E3A5A;color:#90C8F0;border-radius:4px;cursor:pointer">📐 Route</button>'
+      + '<button onclick="deleteDesignPlan(' + i + ')" style="font-size:9px;padding:3px 7px;background:none;border:1px solid #3A1A1A;color:#F08080;border-radius:4px;cursor:pointer">✕</button>'
+      + '</div></div></div>';
+  }).join('');
+}
+
+function populateDesignSelects() {
+  const sel = document.getElementById('designAnalyzeSelect');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— choose a plan —</option>'
+    + DESIGN_PLANS.map((p, i) => '<option value="' + i + '">' + escHtml(p.name) + '</option>').join('');
+  if (cur !== '') sel.value = cur;
+
+  const bgSel = document.getElementById('routeBgSelect');
+  if (!bgSel) return;
+  bgSel.innerHTML = '<option value="">None</option>'
+    + DESIGN_PLANS.map((p, i) => '<option value="' + i + '">' + escHtml(p.name) + '</option>').join('');
+}
+
+// ── Upload ────────────────────────────────────────────────────────────────────
+
+function handleDesignDrop(e) {
+  e.preventDefault();
+  document.getElementById('designDropZone').style.borderColor = '#1E3A5A';
+  uploadDesignFiles([...e.dataTransfer.files]);
+}
+function handleDesignFileInput(input) { uploadDesignFiles([...input.files]); input.value = ''; }
+
+async function uploadDesignFiles(files) {
+  const valid = files.filter(f => f.type === 'application/pdf' || f.type.startsWith('image/'));
+  if (!valid.length) return;
+  if (!firebaseReady || !storage) { showToast('❌', 'Firebase not connected'); return; }
+  const prog = document.getElementById('designUploadProgress');
+  prog.style.display = 'block';
+  let ok = 0;
+  for (let i = 0; i < valid.length; i++) {
+    const file = valid[i];
+    prog.textContent = 'Uploading ' + (i+1) + ' of ' + valid.length + ': ' + file.name + '…';
+    const path = 'designs/' + Date.now() + '_' + file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    try {
+      const ref = storage.ref(path);
+      await ref.put(file);
+      const url = await ref.getDownloadURL();
+      DESIGN_PLANS.push({ url, name: file.name, storagePath: path, type: file.type, uploadedAt: new Date().toISOString() });
+      persistDesignPlans();
+      ok++;
+    } catch(e) {
+      console.error('Design upload error:', e);
+      showToast('❌', 'Failed: ' + file.name);
+    }
+  }
+  prog.style.display = 'none';
+  renderDesignGrid();
+  populateDesignSelects();
+  if (ok) showToast('✅', ok + ' plan' + (ok > 1 ? 's' : '') + ' uploaded');
+}
+
+async function deleteDesignPlan(idx) {
+  const p = DESIGN_PLANS[idx];
+  if (!p || !confirm('Delete "' + p.name + '"? This cannot be undone.')) return;
+  if (storage && p.storagePath) { try { await storage.ref(p.storagePath).delete(); } catch(e) {} }
+  DESIGN_PLANS.splice(idx, 1);
+  persistDesignPlans();
+  renderDesignGrid();
+  populateDesignSelects();
+}
+
+// ── AI Analysis ───────────────────────────────────────────────────────────────
+
+function setDesignQ(q) { const ta = document.getElementById('designAnalyzeQ'); if (ta) ta.value = q; }
+
+async function runDesignAnalysis() {
+  const idx = document.getElementById('designAnalyzeSelect').value;
+  const q   = (document.getElementById('designAnalyzeQ').value || '').trim();
+  if (idx === '' || !q) { showToast('❌', 'Select a plan and enter a question'); return; }
+  if (!ANTHROPIC_API_KEY) {
+    const key = prompt('Enter your Anthropic API key (sk-ant-…):');
+    if (!key || !key.trim().startsWith('sk-')) { showToast('❌', 'Valid API key required'); return; }
+    ANTHROPIC_API_KEY = key.trim(); localStorage.setItem('anthropic_key', ANTHROPIC_API_KEY);
+  }
+  const plan = DESIGN_PLANS[+idx];
+  if (!plan) return;
+  const btn = document.getElementById('designAnalyzeBtn');
+  const resultDiv = document.getElementById('designAnalysisResult');
+  const warnDiv   = document.getElementById('designAnalysisWarn');
+  btn.disabled = true; btn.textContent = '⏳ Analyzing…';
+  resultDiv.style.display = 'none'; warnDiv.style.display = 'none';
+  try {
+    const resp = await fetch(plan.url);
+    if (!resp.ok) throw new Error('Could not fetch plan file (HTTP ' + resp.status + ')');
+    const blob = await resp.blob();
+    const base64 = await new Promise(res => {
+      const reader = new FileReader();
+      reader.onload = e => res(e.target.result.split(',')[1]);
+      reader.readAsDataURL(blob);
+    });
+    const isPdf = plan.type === 'application/pdf';
+    const contentBlock = isPdf
+      ? { type:'document', source:{ type:'base64', media_type:'application/pdf', data:base64 } }
+      : { type:'image',    source:{ type:'base64', media_type: plan.type || 'image/jpeg', data:base64 } };
+    const headers = {
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'anthropic-dangerous-direct-browser-client': 'true'
+    };
+    if (isPdf) headers['anthropic-beta'] = 'pdfs-2024-09-25';
+    const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', headers,
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4096,
+        messages: [{ role:'user', content:[
+          contentBlock,
+          { type:'text', text: 'You are an expert HVAC contractor and construction estimator in Austin, TX specializing in commercial garage HVAC installations at Garages of the Americas (GOTA). The user is Alexander Rodriguez from Avant Development Group.\n\n' + q }
+        ]}]
+      })
+    });
+    if (!aiResp.ok) { const err = await aiResp.json().catch(()=>({})); throw new Error(err.error?.message || 'HTTP ' + aiResp.status); }
+    const data = await aiResp.json();
+    resultDiv.textContent = data.content?.[0]?.text || '(no response)';
+    resultDiv.style.display = 'block';
+  } catch(e) {
+    warnDiv.textContent = 'Analysis error: ' + e.message;
+    warnDiv.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = '🤖 Analyze with Claude';
+  }
+}
+
+// ── Routing Canvas Tool ───────────────────────────────────────────────────────
+
+function initRouteCanvas() {
+  const drawCanvas = document.getElementById('routeDrawCanvas');
+  const bgCanvas   = document.getElementById('routeBgCanvas');
+  if (!drawCanvas || drawCanvas.dataset.init === '1') return;
+  drawCanvas.dataset.init = '1';
+  const wrap = document.getElementById('routeCanvasWrap');
+  const W = wrap.clientWidth - 4;
+  const H = Math.max(580, window.innerHeight - 400);
+  [drawCanvas, bgCanvas].forEach(c => {
+    c.width = W; c.height = H;
+    c.style.width = W + 'px'; c.style.height = H + 'px';
+  });
+  const ctx = drawCanvas.getContext('2d');
+  _routeDrawGrid(ctx, W, H);
+  ROUTE_STATE.history = [ctx.getImageData(0, 0, W, H)];
+  drawCanvas.onmousedown  = _routeDown;
+  drawCanvas.onmousemove  = _routeMove;
+  drawCanvas.onmouseup    = _routeUp;
+  drawCanvas.onmouseleave = _routeUp;
+  drawCanvas.ontouchstart = e => { e.preventDefault(); _routeDown(_touch2mouse(e, drawCanvas)); };
+  drawCanvas.ontouchmove  = e => { e.preventDefault(); _routeMove(_touch2mouse(e, drawCanvas)); };
+  drawCanvas.ontouchend   = e => { e.preventDefault(); _routeUp({}); };
+}
+
+function _touch2mouse(e, canvas) {
+  const r = canvas.getBoundingClientRect(), t = e.touches[0];
+  return { offsetX: t.clientX - r.left, offsetY: t.clientY - r.top };
+}
+
+function _routeDrawGrid(ctx, W, H) {
+  ctx.fillStyle = '#F8F8F8'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#E0E4EE'; ctx.lineWidth = 0.5;
+  for (let x = 0; x <= W; x += 20) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for (let y = 0; y <= H; y += 20) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+}
+
+function _routeCtx()  { return document.getElementById('routeDrawCanvas')?.getContext('2d'); }
+function _routeBgCtx(){ return document.getElementById('routeBgCanvas')?.getContext('2d'); }
+
+function _routeDown(e) {
+  ROUTE_STATE.drawing = true;
+  ROUTE_STATE.startX = ROUTE_STATE.lastX = e.offsetX;
+  ROUTE_STATE.startY = ROUTE_STATE.lastY = e.offsetY;
+  if (ROUTE_STATE.tool !== 'line') { const c = _routeCtx(); c.beginPath(); c.moveTo(e.offsetX, e.offsetY); }
+  else { const c = _routeCtx(), cv = document.getElementById('routeDrawCanvas'); ROUTE_STATE.tempSnapshot = c.getImageData(0,0,cv.width,cv.height); }
+}
+
+function _routeMove(e) {
+  if (!ROUTE_STATE.drawing) return;
+  const ctx = _routeCtx();
+  const col = ROUTE_COLORS[ROUTE_STATE.system];
+  const lw  = ROUTE_STATE.lineWidth;
+  if (ROUTE_STATE.tool === 'pencil') {
+    ctx.lineWidth = lw; ctx.strokeStyle = col; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.lineTo(e.offsetX, e.offsetY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(e.offsetX, e.offsetY);
+  } else if (ROUTE_STATE.tool === 'erase') {
+    ctx.lineWidth = lw * 5; ctx.strokeStyle = '#F8F8F8'; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.lineTo(e.offsetX, e.offsetY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(e.offsetX, e.offsetY);
+  } else if (ROUTE_STATE.tool === 'line' && ROUTE_STATE.tempSnapshot) {
+    ctx.putImageData(ROUTE_STATE.tempSnapshot, 0, 0);
+    ctx.beginPath(); ctx.lineWidth = lw; ctx.strokeStyle = col; ctx.lineCap = 'round';
+    ctx.setLineDash([6,3]);
+    ctx.moveTo(ROUTE_STATE.startX, ROUTE_STATE.startY); ctx.lineTo(e.offsetX, e.offsetY); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ROUTE_STATE.lastX = e.offsetX; ROUTE_STATE.lastY = e.offsetY;
+}
+
+function _routeUp(e) {
+  if (!ROUTE_STATE.drawing) return;
+  const ctx = _routeCtx(); const cv = document.getElementById('routeDrawCanvas');
+  if (ROUTE_STATE.tool === 'line' && ROUTE_STATE.tempSnapshot) {
+    ctx.putImageData(ROUTE_STATE.tempSnapshot, 0, 0);
+    ctx.beginPath(); ctx.lineWidth = ROUTE_STATE.lineWidth;
+    ctx.strokeStyle = ROUTE_COLORS[ROUTE_STATE.system]; ctx.lineCap = 'round';
+    ctx.moveTo(ROUTE_STATE.startX, ROUTE_STATE.startY);
+    ctx.lineTo(e.offsetX ?? ROUTE_STATE.lastX, e.offsetY ?? ROUTE_STATE.lastY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ROUTE_STATE.drawing = false;
+  ROUTE_STATE.history.push(ctx.getImageData(0, 0, cv.width, cv.height));
+  if (ROUTE_STATE.history.length > 25) ROUTE_STATE.history.shift();
+}
+
+function routeUndo() {
+  if (ROUTE_STATE.history.length <= 1) return;
+  ROUTE_STATE.history.pop();
+  _routeCtx().putImageData(ROUTE_STATE.history[ROUTE_STATE.history.length-1], 0, 0);
+}
+
+function routeClear() {
+  if (!confirm('Clear the entire routing diagram?')) return;
+  const ctx = _routeCtx(); const cv = document.getElementById('routeDrawCanvas');
+  _routeDrawGrid(ctx, cv.width, cv.height);
+  ROUTE_STATE.history = [ctx.getImageData(0,0,cv.width,cv.height)];
+}
+
+function routeExport() {
+  const dc = document.getElementById('routeDrawCanvas');
+  const bc = document.getElementById('routeBgCanvas');
+  const exp = document.createElement('canvas');
+  exp.width = dc.width; exp.height = dc.height;
+  const ctx = exp.getContext('2d');
+  ctx.drawImage(bc, 0, 0); ctx.drawImage(dc, 0, 0);
+  const a = document.createElement('a');
+  a.download = 'routing-diagram-' + new Date().toISOString().slice(0,10) + '.png';
+  a.href = exp.toDataURL('image/png'); a.click();
+}
+
+function setRouteSystem(sys) {
+  ROUTE_STATE.system = sys;
+  Object.keys(ROUTE_COLORS).forEach(s => {
+    const b = document.getElementById('rsys-' + s); if (!b) return;
+    const active = s === sys;
+    b.style.background  = active ? ROUTE_COLORS[s] : '#0A0C18';
+    b.style.color       = active ? 'white' : ROUTE_COLORS[s];
+    b.style.border      = '2px solid ' + (active ? ROUTE_COLORS[s] : '#1A2438');
+    b.style.fontWeight  = active ? '700' : '400';
+  });
+}
+
+function setRouteTool(tool) {
+  ROUTE_STATE.tool = tool;
+  ['pencil','line','erase'].forEach(t => {
+    const b = document.getElementById('rtool-' + t); if (!b) return;
+    const active = t === tool;
+    b.style.background = active ? '#1A2438' : '#0A0C18';
+    b.style.color      = active ? '#90C8F0' : '#5A6A8A';
+    b.style.border     = '2px solid ' + (active ? '#90C8F0' : '#1A2438');
+    b.style.fontWeight = active ? '700' : '400';
+  });
+}
+
+async function loadRouteBg(idx) {
+  const bgCtx = _routeBgCtx(); const bgCanvas = document.getElementById('routeBgCanvas');
+  bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+  if (!idx && idx !== 0) return;
+  const plan = DESIGN_PLANS[+idx]; if (!plan) return;
+  const img = new Image(); img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    const scale = Math.min(bgCanvas.width/img.width, bgCanvas.height/img.height);
+    const w = img.width*scale, h = img.height*scale;
+    bgCtx.globalAlpha = 0.4;
+    bgCtx.drawImage(img, (bgCanvas.width-w)/2, (bgCanvas.height-h)/2, w, h);
+    bgCtx.globalAlpha = 1;
+  };
+  img.src = plan.url;
+}
+
+function loadBgFromPlan(idx) {
+  const plan = DESIGN_PLANS[idx];
+  switchDesignTab('route');
+  if (!plan || !plan.type?.startsWith('image/')) { showToast('ℹ️', 'Only image files can be used as background — open the PDF in a separate window for reference'); return; }
+  const bgSel = document.getElementById('routeBgSelect');
+  if (bgSel) { bgSel.value = String(idx); loadRouteBg(idx); }
+}
 </script>
 </body></html>
