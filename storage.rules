@@ -33,6 +33,13 @@ service firebase.storage {
                    && request.resource.contentType.matches('image/.*');
     }
 
+    // ── Per-unit GC buildout plans ────────────────────────────────
+    match /units/{unitId}/designs/{filename} {
+      allow read:  if request.auth != null;
+      allow write: if request.auth != null
+                   && request.resource.size < 25 * 1024 * 1024;
+    }
+
     // ── AvantAccess customer design uploads ───────────────────────
     match /designs/{filename} {
       allow read:  if request.auth != null;
