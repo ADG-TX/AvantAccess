@@ -3,20 +3,34 @@ service firebase.storage {
   match /b/{bucket}/o {
 
     // ── GOTA HVAC unit photos ──────────────────────────────────────
-    // Private to signed-in staff only.
     match /units/{unitId}/photos/{filename} {
       allow read:  if request.auth != null;
       allow write: if request.auth != null
-                   && request.resource.size < 15 * 1024 * 1024   // max 15 MB
-                   && request.resource.contentType.matches('image/.*'); // images only
+                   && request.resource.size < 15 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
     }
 
     // ── GOTA HVAC voice recordings ────────────────────────────────
-    // Private business conversations — signed-in staff only.
     match /units/{unitId}/recordings/{filename} {
       allow read:  if request.auth != null;
       allow write: if request.auth != null
                    && request.resource.size < 300 * 1024 * 1024;
+    }
+
+    // ── Clubhouse photos ──────────────────────────────────────────
+    match /clubhouse/photos/{filename} {
+      allow read:  if request.auth != null;
+      allow write: if request.auth != null
+                   && request.resource.size < 15 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // ── Jobsite / site archive photos ─────────────────────────────
+    match /jobsite/photos/{filename} {
+      allow read:  if request.auth != null;
+      allow write: if request.auth != null
+                   && request.resource.size < 15 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
     }
 
     // ── AvantAccess customer design uploads ───────────────────────

@@ -283,11 +283,12 @@
     <!-- Site Photos -->
     <button onclick="openSitePhotos()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0" title="Jobsite photo archive — drag & drop to upload">📷 Site Photos</button>
 
+    <!-- Design Plans (PIN-protected) -->
+    <button onclick="openDesignPlans()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0" title="Private design plans — PIN required">📐 Design Plans</button>
+
     <!-- Multi-select -->
     <button id="btnMultiSelect" onclick="toggleMultiSelect()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0" title="Select multiple units to bulk-schedule a job">☑ Select Units</button>
 
-    <!-- Reset -->
-    <button onclick="confirmReset()" class="btn btn-gray" style="font-size:10px;padding:4px 10px;opacity:.5" title="Reset all data">↺ Reset</button>
 
     <!-- Logout -->
     <button onclick="handleLogout()" class="btn btn-gray" style="font-size:10px;padding:4px 10px;opacity:.6" title="Sign out"><span id="userBadge" style="margin-right:5px;color:#7A8C6A"></span>⎋ Sign Out</button>
@@ -716,6 +717,142 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════
+     DESIGN PLANS — PIN MODAL
+═══════════════════════════════════════════════ -->
+<div id="designPinModal" class="modal-wrap" style="display:none" onclick="if(event.target===this)closeModal('designPinModal')">
+  <div style="background:#0C0E1A;border:1px solid #C4A26A;border-radius:14px;padding:36px;width:320px;text-align:center" onclick="event.stopPropagation()">
+    <div style="font-size:36px;margin-bottom:10px">📐</div>
+    <h3 style="font-size:18px;font-weight:800;color:#F5EDD8;margin:0 0 6px">Design Plans</h3>
+    <p style="font-size:12px;color:#5A6A8A;margin:0 0 22px">Enter your private PIN to access</p>
+    <input type="password" id="designPinInput" maxlength="4" placeholder="••••"
+      style="width:100%;box-sizing:border-box;text-align:center;font-size:28px;letter-spacing:10px;padding:10px;background:#060810;border:1px solid #1E2840;border-radius:8px;color:#F5EDD8;outline:none"
+      onkeydown="if(event.key==='Enter')checkDesignPin()"
+      oninput="this.value=this.value.replace(/\D/g,'')">
+    <div id="designPinError" style="display:none;color:#F08080;font-size:12px;margin-top:8px">Incorrect PIN — try again</div>
+    <button onclick="checkDesignPin()" class="btn btn-blue" style="width:100%;margin-top:16px;font-size:13px">Unlock →</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     DESIGN PLANS — MAIN MODAL
+═══════════════════════════════════════════════ -->
+<div id="designPlansModal" class="modal-wrap" style="display:none;align-items:flex-start;padding:0;overflow-y:auto" onclick="if(event.target===this)closeModal('designPlansModal')">
+  <div style="background:#0C0E1A;width:100%;max-width:1100px;min-height:100vh;margin:0 auto;padding:24px;display:flex;flex-direction:column;gap:16px" onclick="event.stopPropagation()">
+
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <h2 style="font-size:22px;font-weight:900;color:#C4A26A;margin:0 0 4px">📐 Design Plans</h2>
+        <div style="font-size:12px;color:#5A6A8A">Private — upload, analyze, and route general contractor design plans</div>
+      </div>
+      <button onclick="closeModal('designPlansModal')" style="background:none;border:none;color:#7A8C6A;cursor:pointer;font-size:26px;line-height:1;padding:4px">×</button>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:4px;border-bottom:1px solid #1A2438;padding-bottom:0">
+      <button id="dpTab-plans"   onclick="switchDesignTab('plans')"   style="font-size:12px;padding:8px 16px;border-radius:6px 6px 0 0;cursor:pointer;font-weight:700;border:1px solid #C4A26A;border-bottom:none;background:#1A2438;color:#C4A26A">📁 Plans</button>
+      <button id="dpTab-analyze" onclick="switchDesignTab('analyze')" style="font-size:12px;padding:8px 16px;border-radius:6px 6px 0 0;cursor:pointer;border:1px solid #1A2438;border-bottom:none;background:#0A0C18;color:#5A6A8A">🤖 AI Analyze</button>
+      <button id="dpTab-route"   onclick="switchDesignTab('route')"   style="font-size:12px;padding:8px 16px;border-radius:6px 6px 0 0;cursor:pointer;border:1px solid #1A2438;border-bottom:none;background:#0A0C18;color:#5A6A8A">📐 Route</button>
+    </div>
+
+    <!-- ── PLANS TAB ── -->
+    <div id="dpPanel-plans">
+      <div id="designDropZone"
+        ondrop="handleDesignDrop(event)" ondragover="event.preventDefault();this.style.borderColor='#C4A26A'" ondragleave="this.style.borderColor='#1E3A5A'"
+        onclick="document.getElementById('designFileInput').click()"
+        style="border:2px dashed #1E3A5A;border-radius:10px;padding:32px;text-align:center;cursor:pointer;margin-bottom:16px;transition:border-color .2s">
+        <input type="file" id="designFileInput" accept=".pdf,image/*" multiple style="display:none" onchange="handleDesignFileInput(this)">
+        <div style="font-size:36px;margin-bottom:8px">📄</div>
+        <div style="font-size:14px;font-weight:600;color:#90C8F0">Drop design plans here to upload</div>
+        <div style="font-size:11px;color:#4D5C3D;margin-top:4px">PDF, JPG, PNG · Up to 25MB per file · Multiple at once</div>
+      </div>
+      <div id="designUploadProgress" style="display:none;font-size:12px;color:#90C8F0;text-align:center;padding:6px 0"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:11px;color:#5A6A8A;font-weight:700;letter-spacing:.05em">UPLOADED PLANS</div>
+        <div id="designPlanCount" style="font-size:11px;color:#5A6A8A">0 plans</div>
+      </div>
+      <div id="designPlansGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px"></div>
+    </div>
+
+    <!-- ── ANALYZE TAB ── -->
+    <div id="dpPanel-analyze" style="display:none">
+      <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:200px">
+          <div style="font-size:11px;color:#5A6A8A;font-weight:700;margin-bottom:4px">SELECT PLAN</div>
+          <select id="designAnalyzeSelect" style="width:100%;padding:8px 10px;background:#060810;border:1px solid #1E2840;border-radius:6px;color:#F5EDD8;font-size:13px">
+            <option value="">— choose a plan —</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <button class="btn btn-gray" style="font-size:10px" onclick="setDesignQ('Provide a detailed analysis of this design plan: layout summary, HVAC system requirements, recommended unit placement, BTU load per zone, and any notable specifications or concerns.')">📋 Full Analysis</button>
+          <button class="btn btn-gray" style="font-size:10px" onclick="setDesignQ('Create a complete materials list for the HVAC installation shown. Include: copper line sets (sizes and lengths), fittings and flares, refrigerant type and quantity, electrical wire gauges and lengths, breaker sizes, mounting hardware, line set insulation, condensate drain materials, and any other required items. Provide quantities.')">🔧 Materials List</button>
+          <button class="btn btn-gray" style="font-size:10px" onclick="setDesignQ('Estimate the total materials cost for the HVAC installation shown. Provide a table with columns: Item | Qty | Unit | Est. Unit Cost (Austin TX market 2025) | Line Total. Include copper tubing, fittings, refrigerant, electrical, mounting hardware, insulation, and misc. End with a TOTAL ESTIMATED MATERIALS COST.')">💲 Cost Estimate</button>
+          <button class="btn btn-gray" style="font-size:10px" onclick="setDesignQ('Analyze HVAC load requirements: estimate square footage per zone, BTU requirements, recommended unit sizes (tonnage), and any special conditions like ceiling height, insulation, or heat gain factors.')">❄️ HVAC Load</button>
+          <button class="btn btn-gray" style="font-size:10px" onclick="setDesignQ('Identify the optimal routing paths for all systems: (1) Copper refrigerant lines — from condensers to air handlers, (2) Plumbing — condensate drain routes, (3) Communication/data — thermostat and control wiring, (4) Power/electrical — from panels to units. Describe recommended routes, obstacles, and any code considerations.')">📐 Routing Plan</button>
+        </div>
+      </div>
+      <textarea id="designAnalyzeQ" rows="3" placeholder="Ask anything about the plan — e.g. 'What size copper lines do I need?' or 'How many mini-splits does this building require?'"
+        style="width:100%;box-sizing:border-box;padding:10px;background:#060810;border:1px solid #1E2840;border-radius:8px;color:#F5EDD8;font-size:13px;resize:vertical;margin-bottom:10px"></textarea>
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <button class="btn btn-blue" style="flex:1;font-size:13px" onclick="runDesignAnalysis()" id="designAnalyzeBtn">🤖 Analyze with Claude</button>
+        <button class="btn btn-gray" onclick="document.getElementById('designAnalyzeQ').value=''">Clear</button>
+      </div>
+      <div id="designAnalysisResult" style="display:none;background:#060810;border:1px solid #1E2840;border-radius:10px;padding:16px;font-size:13px;color:#DDD5B8;line-height:1.65;white-space:pre-wrap;max-height:500px;overflow-y:auto"></div>
+      <div id="designAnalysisWarn" style="display:none;margin-top:8px;font-size:11px;color:#7A8C6A;background:#0D1509;border:1px solid #1C2D16;border-radius:6px;padding:10px"></div>
+    </div>
+
+    <!-- ── ROUTE TAB ── -->
+    <div id="dpPanel-route" style="display:none">
+      <!-- Toolbar -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:10px 12px;background:#060810;border:1px solid #1A2438;border-radius:8px;margin-bottom:10px">
+        <div style="display:flex;gap:5px;align-items:center">
+          <span style="font-size:10px;color:#5A6A8A;font-weight:700">SYSTEM:</span>
+          <button id="rsys-copper"        onclick="setRouteSystem('copper')"        style="font-size:10px;padding:4px 9px;background:#EF4444;color:white;border:2px solid #EF4444;border-radius:4px;cursor:pointer;font-weight:700">🔴 Copper</button>
+          <button id="rsys-plumbing"      onclick="setRouteSystem('plumbing')"      style="font-size:10px;padding:4px 9px;background:#0A0C18;color:#3B82F6;border:2px solid #1A2438;border-radius:4px;cursor:pointer">🔵 Plumbing</button>
+          <button id="rsys-communication" onclick="setRouteSystem('communication')" style="font-size:10px;padding:4px 9px;background:#0A0C18;color:#22C55E;border:2px solid #1A2438;border-radius:4px;cursor:pointer">📡 Comm</button>
+          <button id="rsys-power"         onclick="setRouteSystem('power')"         style="font-size:10px;padding:4px 9px;background:#0A0C18;color:#F59E0B;border:2px solid #1A2438;border-radius:4px;cursor:pointer">⚡ Power</button>
+        </div>
+        <div style="display:flex;gap:5px;align-items:center">
+          <span style="font-size:10px;color:#5A6A8A;font-weight:700">TOOL:</span>
+          <button id="rtool-pencil" onclick="setRouteTool('pencil')" style="font-size:10px;padding:4px 9px;background:#1A2438;color:#90C8F0;border:2px solid #90C8F0;border-radius:4px;cursor:pointer;font-weight:700">✏️ Draw</button>
+          <button id="rtool-line"   onclick="setRouteTool('line')"   style="font-size:10px;padding:4px 9px;background:#0A0C18;color:#5A6A8A;border:2px solid #1A2438;border-radius:4px;cursor:pointer">📏 Straight</button>
+          <button id="rtool-erase"  onclick="setRouteTool('erase')"  style="font-size:10px;padding:4px 9px;background:#0A0C18;color:#5A6A8A;border:2px solid #1A2438;border-radius:4px;cursor:pointer">🧹 Erase</button>
+        </div>
+        <div style="display:flex;gap:5px;align-items:center">
+          <span style="font-size:10px;color:#5A6A8A;font-weight:700">WIDTH:</span>
+          <input type="range" id="routeLineWidth" min="1" max="14" value="3" style="width:72px;accent-color:#C4A26A" oninput="ROUTE_STATE.lineWidth=+this.value">
+        </div>
+        <div style="display:flex;gap:5px;align-items:center">
+          <span style="font-size:10px;color:#5A6A8A;font-weight:700">BG PLAN:</span>
+          <select id="routeBgSelect" onchange="loadRouteBg(this.value)" style="padding:4px 7px;background:#060810;border:1px solid #1E2840;border-radius:4px;color:#F5EDD8;font-size:10px">
+            <option value="">None</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:5px;margin-left:auto">
+          <button onclick="routeUndo()"   class="btn btn-gray" style="font-size:10px;padding:4px 10px">↩ Undo</button>
+          <button onclick="routeClear()"  class="btn btn-gray" style="font-size:10px;padding:4px 10px;color:#F08080">🗑 Clear</button>
+          <button onclick="routeExport()" class="btn btn-blue" style="font-size:10px;padding:4px 10px">💾 Save PNG</button>
+        </div>
+      </div>
+      <!-- Legend -->
+      <div style="display:flex;gap:18px;margin-bottom:8px;flex-wrap:wrap">
+        <span style="font-size:11px;color:#EF4444;font-weight:700">● Copper / Refrigerant</span>
+        <span style="font-size:11px;color:#3B82F6;font-weight:700">● Plumbing</span>
+        <span style="font-size:11px;color:#22C55E;font-weight:700">● Communication / Data</span>
+        <span style="font-size:11px;color:#F59E0B;font-weight:700">● Power / Electrical</span>
+      </div>
+      <!-- Canvas -->
+      <div id="routeCanvasWrap" style="position:relative;border:2px solid #1A2438;border-radius:8px;overflow:hidden;line-height:0">
+        <canvas id="routeBgCanvas"   style="position:absolute;top:0;left:0;pointer-events:none"></canvas>
+        <canvas id="routeDrawCanvas" style="display:block;cursor:crosshair"></canvas>
+      </div>
+      <div style="font-size:11px;color:#3A4A6A;margin-top:6px;text-align:center">Click and drag to draw · Use Straight tool for precise lines · Save PNG exports both background and drawing</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
      BULK ACTION BAR
 ═══════════════════════════════════════════════ -->
 <div id="bulkBar" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0C0E1A;border:1px solid #C4A26A;border-radius:14px;padding:13px 22px;z-index:90;align-items:center;gap:14px;box-shadow:0 12px 48px rgba(0,0,0,.85);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);white-space:nowrap">
@@ -869,6 +1006,8 @@ async function init() {
         snapshot.forEach(doc => {
           const d = doc.data();
           if (!d.photos) d.photos = [];
+          d.photos = d.photos.filter(p => isValidStorageUrl(p.url));
+          if (d.mainPhotoUrl && !isValidStorageUrl(d.mainPhotoUrl)) { d.mainPhotoUrl = ''; d.mainPhotoName = ''; }
           if (!d.serviceHistory) d.serviceHistory = [];
           if (!d.condenser) d.condenser = { model:'', serial:'', installDate:'', warrantyExpires:'', refrigerant:'' };
           if (!d.headUnits) d.headUnits = [];
@@ -904,7 +1043,12 @@ async function init() {
   const saved = localStorage.getItem('gota_hvac_v2');
   if (saved) {
     DATA = JSON.parse(saved);
-    Object.values(DATA).forEach(u => { if (!u.photos) u.photos = []; });
+    Object.values(DATA).forEach(u => {
+      if (!u.photos) u.photos = [];
+      // Strip any blob URLs that survived from a previous bad session
+      u.photos = u.photos.filter(p => isValidStorageUrl(p.url));
+      if (u.mainPhotoUrl && !isValidStorageUrl(u.mainPhotoUrl)) { u.mainPhotoUrl = ''; u.mainPhotoName = ''; }
+    });
   } else {
     buildDefaults();
   }
@@ -955,6 +1099,7 @@ async function syncToFirestore() {
     // Firestore batch limit is 500 writes; with 152 units we're well under
     const batch = db.batch();
     Object.values(DATA).forEach(u => {
+      if (!u.id || String(u.id).startsWith('__')) return; // skip reserved/special keys
       batch.set(db.collection('units').doc(String(u.id)), u);
     });
     await batch.commit();
@@ -2568,17 +2713,32 @@ function showMicroSave() {
 // ════════════════════════════════════════════════════════════
 // CLUBHOUSE
 // ════════════════════════════════════════════════════════════
+function scrubClubhouse(data) {
+  const c = Object.assign({ notes:'', photos:[], mainPhotoUrl:'', mainPhotoName:'' }, data);
+  c.photos = (c.photos || []).filter(p => isValidStorageUrl(p.url));
+  if (!isValidStorageUrl(c.mainPhotoUrl)) { c.mainPhotoUrl = ''; c.mainPhotoName = ''; }
+  return c;
+}
+
 async function loadClubhouse() {
+  const local = localStorage.getItem('gota_clubhouse');
+  if (local) { try { CLUBHOUSE = scrubClubhouse(JSON.parse(local)); } catch(e) {} }
   if (!firestoreReady) return;
   try {
     const doc = await db.collection('properties').doc('clubhouse').get();
-    if (doc.exists) CLUBHOUSE = Object.assign({ notes:'', photos:[], mainPhotoUrl:'', mainPhotoName:'' }, doc.data());
-  } catch(e) { console.warn('Clubhouse load failed:', e); }
+    if (doc.exists) {
+      CLUBHOUSE = scrubClubhouse(doc.data());
+      localStorage.setItem('gota_clubhouse', JSON.stringify(CLUBHOUSE));
+    }
+  } catch(e) { console.warn('Clubhouse load failed, using local cache:', e); }
 }
 
 function persistClubhouse() {
+  const safe = scrubClubhouse(CLUBHOUSE);
+  CLUBHOUSE = safe;
+  localStorage.setItem('gota_clubhouse', JSON.stringify(safe));
   if (!firestoreReady) return;
-  db.collection('properties').doc('clubhouse').set(CLUBHOUSE).catch(e => console.error('Clubhouse save error:', e));
+  db.collection('properties').doc('clubhouse').set(safe).catch(e => console.error('Clubhouse save error:', e));
 }
 
 function openClubhouse() {
@@ -2664,41 +2824,55 @@ function handleClubFileInput(input) { uploadClubhouseFiles([...input.files]); in
 async function uploadClubhouseFiles(files) {
   const imgs = files.filter(f => f.type.startsWith('image/'));
   if (!imgs.length) return;
-  showToast('⬆️', `Uploading ${imgs.length} photo${imgs.length>1?'s':''}…`);
+  if (!firebaseReady || !storage) {
+    showToast('❌', 'Firebase not connected — photos cannot be saved.');
+    return;
+  }
+  if (!CLUBHOUSE.photos) CLUBHOUSE.photos = [];
+  let successCount = 0;
   for (const file of imgs) {
     const path = `clubhouse/photos/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
-    let url = URL.createObjectURL(file);
-    if (firebaseReady && storage) {
-      try {
-        const ref = storage.ref(path);
-        await ref.put(file);
-        url = await ref.getDownloadURL();
-      } catch(e) { console.error('Upload error:', e); }
+    try {
+      const ref = storage.ref(path);
+      await ref.put(file);
+      const url = await ref.getDownloadURL();
+      const cidx = CLUBHOUSE.photos.length;
+      CLUBHOUSE.photos.push({ url, name: file.name, storagePath: path, uploadedAt: new Date().toISOString() });
+      persistClubhouse(); // save after every photo
+      renderClubhouseGrid();
+      indexSinglePhoto('clubhouse', null, cidx);
+      successCount++;
+    } catch(e) {
+      console.error('Clubhouse upload error:', e);
+      showToast('❌', `Failed to upload ${file.name}`);
     }
-    if (!CLUBHOUSE.photos) CLUBHOUSE.photos = [];
-    const cidx = CLUBHOUSE.photos.length;
-    CLUBHOUSE.photos.push({ url, name: file.name, storagePath: path, uploadedAt: new Date().toISOString() });
-    indexSinglePhoto('clubhouse', null, cidx);
   }
-  persistClubhouse();
-  renderClubhouseGrid();
-  showToast('✅', `${imgs.length} photo${imgs.length>1?'s':''} added to Clubhouse`);
+  if (successCount > 0) showToast('✅', `${successCount} photo${successCount>1?'s':''} added to Clubhouse`);
 }
 
 // ════════════════════════════════════════════════════════════
 // SITE PHOTOS (Jobsite Archive)
 // ════════════════════════════════════════════════════════════
 async function loadSitePhotos() {
+  // localStorage first (instant, survives Firestore outages)
+  const local = localStorage.getItem('gota_site_photos');
+  if (local) { try { SITE_PHOTOS = JSON.parse(local).filter(p => isValidStorageUrl(p.url)); } catch(e) {} }
   if (!firestoreReady) return;
   try {
     const doc = await db.collection('properties').doc('sitePhotos').get();
-    if (doc.exists && doc.data().photos) SITE_PHOTOS = doc.data().photos;
-  } catch(e) { console.warn('Site photos load failed:', e); }
+    if (doc.exists && doc.data().photos) {
+      SITE_PHOTOS = doc.data().photos.filter(p => isValidStorageUrl(p.url));
+      localStorage.setItem('gota_site_photos', JSON.stringify(SITE_PHOTOS));
+    }
+  } catch(e) { console.warn('Site photos load failed, using local cache:', e); }
 }
 
 function persistSitePhotos() {
+  const safe = SITE_PHOTOS.filter(p => isValidStorageUrl(p.url));
+  SITE_PHOTOS = safe;
+  localStorage.setItem('gota_site_photos', JSON.stringify(safe));
   if (!firestoreReady) return;
-  db.collection('properties').doc('sitePhotos').set({ photos: SITE_PHOTOS }).catch(e => console.error('Site photos save error:', e));
+  db.collection('properties').doc('sitePhotos').set({ photos: safe }).catch(e => console.error('Site photos save error:', e));
 }
 
 function openSitePhotos() {
@@ -2739,6 +2913,11 @@ async function deleteSitePhoto(idx) {
   renderSitePhotoGrid();
 }
 
+// Returns true only for permanent Firebase Storage HTTPS URLs — never blob: or empty
+function isValidStorageUrl(url) {
+  return typeof url === 'string' && url.startsWith('https://');
+}
+
 function handleSiteDrop(e) {
   e.preventDefault();
   document.getElementById('siteDropZone').classList.remove('drag-over');
@@ -2749,28 +2928,34 @@ function handleSiteFileInput(input) { uploadSiteFiles([...input.files]); input.v
 async function uploadSiteFiles(files) {
   const imgs = files.filter(f => f.type.startsWith('image/'));
   if (!imgs.length) return;
+  if (!firebaseReady || !storage) {
+    showToast('❌', 'Firebase not connected — photos cannot be saved. Check your connection.');
+    return;
+  }
   const prog = document.getElementById('siteUploadProgress');
   prog.style.display = 'block';
+  let successCount = 0;
   for (let i = 0; i < imgs.length; i++) {
     const file = imgs[i];
     prog.textContent = `Uploading ${i+1} of ${imgs.length}: ${file.name}…`;
     const path = `jobsite/photos/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
-    let url = URL.createObjectURL(file);
-    if (firebaseReady && storage) {
-      try {
-        const ref = storage.ref(path);
-        await ref.put(file);
-        url = await ref.getDownloadURL();
-      } catch(e) { console.error('Site photo upload error:', e); }
+    try {
+      const ref = storage.ref(path);
+      await ref.put(file);
+      const url = await ref.getDownloadURL();
+      const sidx = SITE_PHOTOS.length;
+      SITE_PHOTOS.push({ url, name: file.name, storagePath: path, uploadedAt: new Date().toISOString() });
+      persistSitePhotos(); // save after every photo so a partial upload is never lost
+      renderSitePhotoGrid();
+      indexSinglePhoto('site', null, sidx);
+      successCount++;
+    } catch(e) {
+      console.error('Site photo upload error:', e);
+      showToast('❌', `Failed to upload ${file.name} — check Firebase Storage rules`);
     }
-    const sidx = SITE_PHOTOS.length;
-    SITE_PHOTOS.push({ url, name: file.name, storagePath: path, uploadedAt: new Date().toISOString() });
-    indexSinglePhoto('site', null, sidx);
   }
-  persistSitePhotos();
   prog.style.display = 'none';
-  renderSitePhotoGrid();
-  showToast('✅', `${imgs.length} photo${imgs.length>1?'s':''} added to site archive`);
+  if (successCount > 0) showToast('✅', `${successCount} photo${successCount>1?'s':''} saved to site archive`);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -3092,7 +3277,7 @@ async function analyzePhoto() {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (document.getElementById('lightbox').classList.contains('open')) { closeLightbox(); return; }
-    const modals = ['logModal','scheduleModal','textModal','clubhouseModal','sitePhotosModal','visionModal','aiSearchModal'];
+    const modals = ['logModal','scheduleModal','textModal','clubhouseModal','sitePhotosModal','visionModal','aiSearchModal','designPinModal','designPlansModal'];
     const open = modals.find(id => document.getElementById(id).style.display !== 'none');
     if (open) closeModal(open);
     else if (selectedId) closePanel();
@@ -3457,6 +3642,399 @@ if (authReady) {
   const warn = document.getElementById('loginConfigWarn');
   if (warn) { warn.style.display = 'block'; warn.textContent = 'Offline mode — cloud sync and login are unavailable.'; }
   init();
+}
+
+// ════════════════════════════════════════════════════════════
+// DESIGN PLANS — PIN-PROTECTED SECTION
+// ════════════════════════════════════════════════════════════
+const DESIGN_PIN = '1021';
+let designUnlocked = false;
+let DESIGN_PLANS = [];
+
+const ROUTE_COLORS = { copper:'#EF4444', plumbing:'#3B82F6', communication:'#22C55E', power:'#F59E0B' };
+let ROUTE_STATE = { system:'copper', tool:'pencil', lineWidth:3, drawing:false, startX:0, startY:0, lastX:0, lastY:0, history:[], tempSnapshot:null };
+
+function openDesignPlans() {
+  if (!designUnlocked) {
+    document.getElementById('designPinInput').value = '';
+    document.getElementById('designPinError').style.display = 'none';
+    document.getElementById('designPinModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('designPinInput').focus(), 100);
+  } else {
+    _showDesignModal();
+  }
+}
+
+function checkDesignPin() {
+  if (document.getElementById('designPinInput').value.trim() === DESIGN_PIN) {
+    designUnlocked = true;
+    closeModal('designPinModal');
+    _showDesignModal();
+  } else {
+    document.getElementById('designPinError').style.display = 'block';
+    document.getElementById('designPinInput').value = '';
+    document.getElementById('designPinInput').focus();
+  }
+}
+
+function _showDesignModal() {
+  document.getElementById('designPlansModal').style.display = 'flex';
+  switchDesignTab('plans');
+  loadDesignPlans();
+}
+
+function switchDesignTab(tab) {
+  ['plans','analyze','route'].forEach(t => {
+    document.getElementById('dpPanel-' + t).style.display = t === tab ? 'block' : 'none';
+    const b = document.getElementById('dpTab-' + t);
+    b.style.background = t === tab ? '#1A2438' : '#0A0C18';
+    b.style.color      = t === tab ? '#C4A26A'  : '#5A6A8A';
+    b.style.border     = '1px solid ' + (t === tab ? '#C4A26A' : '#1A2438');
+    b.style.borderBottom = 'none';
+  });
+  if (tab === 'route') setTimeout(initRouteCanvas, 50);
+  if (tab === 'analyze') populateDesignSelects();
+}
+
+// ── Persist / load ───────────────────────────────────────────────────────────
+
+function persistDesignPlans() {
+  const safe = DESIGN_PLANS.filter(p => isValidStorageUrl(p.url));
+  DESIGN_PLANS = safe;
+  localStorage.setItem('gota_design_plans', JSON.stringify(safe));
+  if (!firestoreReady) return;
+  db.collection('properties').doc('designPlans').set({ plans: safe })
+    .catch(e => console.error('Design plans save error:', e));
+}
+
+async function loadDesignPlans() {
+  const local = localStorage.getItem('gota_design_plans');
+  if (local) { try { DESIGN_PLANS = JSON.parse(local).filter(p => isValidStorageUrl(p.url)); } catch(e) {} }
+  if (firestoreReady) {
+    try {
+      const doc = await db.collection('properties').doc('designPlans').get();
+      if (doc.exists && doc.data().plans) {
+        DESIGN_PLANS = doc.data().plans.filter(p => isValidStorageUrl(p.url));
+        localStorage.setItem('gota_design_plans', JSON.stringify(DESIGN_PLANS));
+      }
+    } catch(e) {}
+  }
+  renderDesignGrid();
+  populateDesignSelects();
+}
+
+function renderDesignGrid() {
+  const grid  = document.getElementById('designPlansGrid');
+  const count = document.getElementById('designPlanCount');
+  if (!grid) return;
+  count.textContent = DESIGN_PLANS.length + ' plan' + (DESIGN_PLANS.length !== 1 ? 's' : '');
+  if (!DESIGN_PLANS.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:36px;color:#3A4A6A;font-size:13px">No plans uploaded yet — drag PDFs or images above</div>';
+    return;
+  }
+  grid.innerHTML = DESIGN_PLANS.map((p, i) => {
+    const isImg = p.type && p.type.startsWith('image/');
+    const preview = isImg
+      ? '<img src="' + escAttr(p.url) + '" style="width:100%;height:130px;object-fit:cover;display:block">'
+      : '<div style="width:100%;height:130px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#060810;color:#C4A26A"><div style="font-size:40px">📄</div><div style="font-size:10px;color:#5A6A8A;margin-top:6px">PDF</div></div>';
+    return '<div style="border:1px solid #1A2438;border-radius:8px;overflow:hidden;background:#0A0C18">'
+      + preview
+      + '<div style="padding:8px">'
+      + '<div style="font-size:10px;color:#7A8C6A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:6px" title="' + escAttr(p.name) + '">' + escHtml(p.name) + '</div>'
+      + '<div style="display:flex;gap:4px;flex-wrap:wrap">'
+      + '<button onclick="window.open(\'' + escAttr(p.url) + '\',\'_blank\')" style="font-size:9px;padding:3px 7px;background:#0A1428;border:1px solid #1E3A5A;color:#90C8F0;border-radius:4px;cursor:pointer">👁 View</button>'
+      + '<button onclick="switchDesignTab(\'analyze\');document.getElementById(\'designAnalyzeSelect\').value=\'' + i + '\'" style="font-size:9px;padding:3px 7px;background:#0A1428;border:1px solid #1E3A5A;color:#90C8F0;border-radius:4px;cursor:pointer">🤖 Analyze</button>'
+      + '<button onclick="loadBgFromPlan(' + i + ')" style="font-size:9px;padding:3px 7px;background:#0A1428;border:1px solid #1E3A5A;color:#90C8F0;border-radius:4px;cursor:pointer">📐 Route</button>'
+      + '<button onclick="deleteDesignPlan(' + i + ')" style="font-size:9px;padding:3px 7px;background:none;border:1px solid #3A1A1A;color:#F08080;border-radius:4px;cursor:pointer">✕</button>'
+      + '</div></div></div>';
+  }).join('');
+}
+
+function populateDesignSelects() {
+  const sel = document.getElementById('designAnalyzeSelect');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— choose a plan —</option>'
+    + DESIGN_PLANS.map((p, i) => '<option value="' + i + '">' + escHtml(p.name) + '</option>').join('');
+  if (cur !== '') sel.value = cur;
+
+  const bgSel = document.getElementById('routeBgSelect');
+  if (!bgSel) return;
+  bgSel.innerHTML = '<option value="">None</option>'
+    + DESIGN_PLANS.map((p, i) => '<option value="' + i + '">' + escHtml(p.name) + '</option>').join('');
+}
+
+// ── Upload ────────────────────────────────────────────────────────────────────
+
+function handleDesignDrop(e) {
+  e.preventDefault();
+  document.getElementById('designDropZone').style.borderColor = '#1E3A5A';
+  uploadDesignFiles([...e.dataTransfer.files]);
+}
+function handleDesignFileInput(input) { uploadDesignFiles([...input.files]); input.value = ''; }
+
+async function uploadDesignFiles(files) {
+  const valid = files.filter(f => f.type === 'application/pdf' || f.type.startsWith('image/'));
+  if (!valid.length) return;
+  if (!firebaseReady || !storage) { showToast('❌', 'Firebase not connected'); return; }
+  const prog = document.getElementById('designUploadProgress');
+  prog.style.display = 'block';
+  let ok = 0;
+  for (let i = 0; i < valid.length; i++) {
+    const file = valid[i];
+    prog.textContent = 'Uploading ' + (i+1) + ' of ' + valid.length + ': ' + file.name + '…';
+    const path = 'designs/' + Date.now() + '_' + file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    try {
+      const ref = storage.ref(path);
+      await ref.put(file);
+      const url = await ref.getDownloadURL();
+      DESIGN_PLANS.push({ url, name: file.name, storagePath: path, type: file.type, uploadedAt: new Date().toISOString() });
+      persistDesignPlans();
+      ok++;
+    } catch(e) {
+      console.error('Design upload error:', e);
+      showToast('❌', 'Failed: ' + file.name);
+    }
+  }
+  prog.style.display = 'none';
+  renderDesignGrid();
+  populateDesignSelects();
+  if (ok) showToast('✅', ok + ' plan' + (ok > 1 ? 's' : '') + ' uploaded');
+}
+
+async function deleteDesignPlan(idx) {
+  const p = DESIGN_PLANS[idx];
+  if (!p || !confirm('Delete "' + p.name + '"? This cannot be undone.')) return;
+  if (storage && p.storagePath) { try { await storage.ref(p.storagePath).delete(); } catch(e) {} }
+  DESIGN_PLANS.splice(idx, 1);
+  persistDesignPlans();
+  renderDesignGrid();
+  populateDesignSelects();
+}
+
+// ── AI Analysis ───────────────────────────────────────────────────────────────
+
+function setDesignQ(q) { const ta = document.getElementById('designAnalyzeQ'); if (ta) ta.value = q; }
+
+async function runDesignAnalysis() {
+  const idx = document.getElementById('designAnalyzeSelect').value;
+  const q   = (document.getElementById('designAnalyzeQ').value || '').trim();
+  if (idx === '' || !q) { showToast('❌', 'Select a plan and enter a question'); return; }
+  if (!ANTHROPIC_API_KEY) {
+    const key = prompt('Enter your Anthropic API key (sk-ant-…):');
+    if (!key || !key.trim().startsWith('sk-')) { showToast('❌', 'Valid API key required'); return; }
+    ANTHROPIC_API_KEY = key.trim(); localStorage.setItem('anthropic_key', ANTHROPIC_API_KEY);
+  }
+  const plan = DESIGN_PLANS[+idx];
+  if (!plan) return;
+  const btn = document.getElementById('designAnalyzeBtn');
+  const resultDiv = document.getElementById('designAnalysisResult');
+  const warnDiv   = document.getElementById('designAnalysisWarn');
+  btn.disabled = true; btn.textContent = '⏳ Analyzing…';
+  resultDiv.style.display = 'none'; warnDiv.style.display = 'none';
+  try {
+    const resp = await fetch(plan.url);
+    if (!resp.ok) throw new Error('Could not fetch plan file (HTTP ' + resp.status + ')');
+    const blob = await resp.blob();
+    const base64 = await new Promise(res => {
+      const reader = new FileReader();
+      reader.onload = e => res(e.target.result.split(',')[1]);
+      reader.readAsDataURL(blob);
+    });
+    const isPdf = plan.type === 'application/pdf';
+    const contentBlock = isPdf
+      ? { type:'document', source:{ type:'base64', media_type:'application/pdf', data:base64 } }
+      : { type:'image',    source:{ type:'base64', media_type: plan.type || 'image/jpeg', data:base64 } };
+    const headers = {
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'anthropic-dangerous-direct-browser-client': 'true'
+    };
+    if (isPdf) headers['anthropic-beta'] = 'pdfs-2024-09-25';
+    const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', headers,
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4096,
+        messages: [{ role:'user', content:[
+          contentBlock,
+          { type:'text', text: 'You are an expert HVAC contractor and construction estimator in Austin, TX specializing in commercial garage HVAC installations at Garages of the Americas (GOTA). The user is Alexander Rodriguez from Avant Development Group.\n\n' + q }
+        ]}]
+      })
+    });
+    if (!aiResp.ok) { const err = await aiResp.json().catch(()=>({})); throw new Error(err.error?.message || 'HTTP ' + aiResp.status); }
+    const data = await aiResp.json();
+    resultDiv.textContent = data.content?.[0]?.text || '(no response)';
+    resultDiv.style.display = 'block';
+  } catch(e) {
+    warnDiv.textContent = 'Analysis error: ' + e.message;
+    warnDiv.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = '🤖 Analyze with Claude';
+  }
+}
+
+// ── Routing Canvas Tool ───────────────────────────────────────────────────────
+
+function initRouteCanvas() {
+  const drawCanvas = document.getElementById('routeDrawCanvas');
+  const bgCanvas   = document.getElementById('routeBgCanvas');
+  if (!drawCanvas || drawCanvas.dataset.init === '1') return;
+  drawCanvas.dataset.init = '1';
+  const wrap = document.getElementById('routeCanvasWrap');
+  const W = wrap.clientWidth - 4;
+  const H = Math.max(580, window.innerHeight - 400);
+  [drawCanvas, bgCanvas].forEach(c => {
+    c.width = W; c.height = H;
+    c.style.width = W + 'px'; c.style.height = H + 'px';
+  });
+  const ctx = drawCanvas.getContext('2d');
+  _routeDrawGrid(ctx, W, H);
+  ROUTE_STATE.history = [ctx.getImageData(0, 0, W, H)];
+  drawCanvas.onmousedown  = _routeDown;
+  drawCanvas.onmousemove  = _routeMove;
+  drawCanvas.onmouseup    = _routeUp;
+  drawCanvas.onmouseleave = _routeUp;
+  drawCanvas.ontouchstart = e => { e.preventDefault(); _routeDown(_touch2mouse(e, drawCanvas)); };
+  drawCanvas.ontouchmove  = e => { e.preventDefault(); _routeMove(_touch2mouse(e, drawCanvas)); };
+  drawCanvas.ontouchend   = e => { e.preventDefault(); _routeUp({}); };
+}
+
+function _touch2mouse(e, canvas) {
+  const r = canvas.getBoundingClientRect(), t = e.touches[0];
+  return { offsetX: t.clientX - r.left, offsetY: t.clientY - r.top };
+}
+
+function _routeDrawGrid(ctx, W, H) {
+  ctx.fillStyle = '#F8F8F8'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#E0E4EE'; ctx.lineWidth = 0.5;
+  for (let x = 0; x <= W; x += 20) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for (let y = 0; y <= H; y += 20) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+}
+
+function _routeCtx()  { return document.getElementById('routeDrawCanvas')?.getContext('2d'); }
+function _routeBgCtx(){ return document.getElementById('routeBgCanvas')?.getContext('2d'); }
+
+function _routeDown(e) {
+  ROUTE_STATE.drawing = true;
+  ROUTE_STATE.startX = ROUTE_STATE.lastX = e.offsetX;
+  ROUTE_STATE.startY = ROUTE_STATE.lastY = e.offsetY;
+  if (ROUTE_STATE.tool !== 'line') { const c = _routeCtx(); c.beginPath(); c.moveTo(e.offsetX, e.offsetY); }
+  else { const c = _routeCtx(), cv = document.getElementById('routeDrawCanvas'); ROUTE_STATE.tempSnapshot = c.getImageData(0,0,cv.width,cv.height); }
+}
+
+function _routeMove(e) {
+  if (!ROUTE_STATE.drawing) return;
+  const ctx = _routeCtx();
+  const col = ROUTE_COLORS[ROUTE_STATE.system];
+  const lw  = ROUTE_STATE.lineWidth;
+  if (ROUTE_STATE.tool === 'pencil') {
+    ctx.lineWidth = lw; ctx.strokeStyle = col; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.lineTo(e.offsetX, e.offsetY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(e.offsetX, e.offsetY);
+  } else if (ROUTE_STATE.tool === 'erase') {
+    ctx.lineWidth = lw * 5; ctx.strokeStyle = '#F8F8F8'; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.lineTo(e.offsetX, e.offsetY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(e.offsetX, e.offsetY);
+  } else if (ROUTE_STATE.tool === 'line' && ROUTE_STATE.tempSnapshot) {
+    ctx.putImageData(ROUTE_STATE.tempSnapshot, 0, 0);
+    ctx.beginPath(); ctx.lineWidth = lw; ctx.strokeStyle = col; ctx.lineCap = 'round';
+    ctx.setLineDash([6,3]);
+    ctx.moveTo(ROUTE_STATE.startX, ROUTE_STATE.startY); ctx.lineTo(e.offsetX, e.offsetY); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ROUTE_STATE.lastX = e.offsetX; ROUTE_STATE.lastY = e.offsetY;
+}
+
+function _routeUp(e) {
+  if (!ROUTE_STATE.drawing) return;
+  const ctx = _routeCtx(); const cv = document.getElementById('routeDrawCanvas');
+  if (ROUTE_STATE.tool === 'line' && ROUTE_STATE.tempSnapshot) {
+    ctx.putImageData(ROUTE_STATE.tempSnapshot, 0, 0);
+    ctx.beginPath(); ctx.lineWidth = ROUTE_STATE.lineWidth;
+    ctx.strokeStyle = ROUTE_COLORS[ROUTE_STATE.system]; ctx.lineCap = 'round';
+    ctx.moveTo(ROUTE_STATE.startX, ROUTE_STATE.startY);
+    ctx.lineTo(e.offsetX ?? ROUTE_STATE.lastX, e.offsetY ?? ROUTE_STATE.lastY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ROUTE_STATE.drawing = false;
+  ROUTE_STATE.history.push(ctx.getImageData(0, 0, cv.width, cv.height));
+  if (ROUTE_STATE.history.length > 25) ROUTE_STATE.history.shift();
+}
+
+function routeUndo() {
+  if (ROUTE_STATE.history.length <= 1) return;
+  ROUTE_STATE.history.pop();
+  _routeCtx().putImageData(ROUTE_STATE.history[ROUTE_STATE.history.length-1], 0, 0);
+}
+
+function routeClear() {
+  if (!confirm('Clear the entire routing diagram?')) return;
+  const ctx = _routeCtx(); const cv = document.getElementById('routeDrawCanvas');
+  _routeDrawGrid(ctx, cv.width, cv.height);
+  ROUTE_STATE.history = [ctx.getImageData(0,0,cv.width,cv.height)];
+}
+
+function routeExport() {
+  const dc = document.getElementById('routeDrawCanvas');
+  const bc = document.getElementById('routeBgCanvas');
+  const exp = document.createElement('canvas');
+  exp.width = dc.width; exp.height = dc.height;
+  const ctx = exp.getContext('2d');
+  ctx.drawImage(bc, 0, 0); ctx.drawImage(dc, 0, 0);
+  const a = document.createElement('a');
+  a.download = 'routing-diagram-' + new Date().toISOString().slice(0,10) + '.png';
+  a.href = exp.toDataURL('image/png'); a.click();
+}
+
+function setRouteSystem(sys) {
+  ROUTE_STATE.system = sys;
+  Object.keys(ROUTE_COLORS).forEach(s => {
+    const b = document.getElementById('rsys-' + s); if (!b) return;
+    const active = s === sys;
+    b.style.background  = active ? ROUTE_COLORS[s] : '#0A0C18';
+    b.style.color       = active ? 'white' : ROUTE_COLORS[s];
+    b.style.border      = '2px solid ' + (active ? ROUTE_COLORS[s] : '#1A2438');
+    b.style.fontWeight  = active ? '700' : '400';
+  });
+}
+
+function setRouteTool(tool) {
+  ROUTE_STATE.tool = tool;
+  ['pencil','line','erase'].forEach(t => {
+    const b = document.getElementById('rtool-' + t); if (!b) return;
+    const active = t === tool;
+    b.style.background = active ? '#1A2438' : '#0A0C18';
+    b.style.color      = active ? '#90C8F0' : '#5A6A8A';
+    b.style.border     = '2px solid ' + (active ? '#90C8F0' : '#1A2438');
+    b.style.fontWeight = active ? '700' : '400';
+  });
+}
+
+async function loadRouteBg(idx) {
+  const bgCtx = _routeBgCtx(); const bgCanvas = document.getElementById('routeBgCanvas');
+  bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+  if (!idx && idx !== 0) return;
+  const plan = DESIGN_PLANS[+idx]; if (!plan) return;
+  const img = new Image(); img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    const scale = Math.min(bgCanvas.width/img.width, bgCanvas.height/img.height);
+    const w = img.width*scale, h = img.height*scale;
+    bgCtx.globalAlpha = 0.4;
+    bgCtx.drawImage(img, (bgCanvas.width-w)/2, (bgCanvas.height-h)/2, w, h);
+    bgCtx.globalAlpha = 1;
+  };
+  img.src = plan.url;
+}
+
+function loadBgFromPlan(idx) {
+  const plan = DESIGN_PLANS[idx];
+  switchDesignTab('route');
+  if (!plan || !plan.type?.startsWith('image/')) { showToast('ℹ️', 'Only image files can be used as background — open the PDF in a separate window for reference'); return; }
+  const bgSel = document.getElementById('routeBgSelect');
+  if (bgSel) { bgSel.value = String(idx); loadRouteBg(idx); }
 }
 </script>
 </body></html>
