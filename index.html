@@ -283,6 +283,9 @@
     <!-- Site Photos -->
     <button onclick="openSitePhotos()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0" title="Jobsite photo archive — drag & drop to upload">📷 Site Photos</button>
 
+    <!-- Design Plans (PIN-protected) -->
+    <button onclick="openDesignPlans()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0" title="Private design plans — PIN required">📐 Design Plans</button>
+
     <!-- Multi-select -->
     <button id="btnMultiSelect" onclick="toggleMultiSelect()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0" title="Select multiple units to bulk-schedule a job">☑ Select Units</button>
 
@@ -710,6 +713,142 @@
     </div>
     <div id="visionResult" style="display:none;background:#060810;border:1px solid #1E2840;border-radius:8px;padding:14px;font-size:13px;color:#DDD5B8;line-height:1.6;white-space:pre-wrap;max-height:280px;overflow-y:auto"></div>
     <div id="visionApiWarn" style="display:none;margin-top:10px;font-size:11px;color:#7A8C6A;background:#0D1509;border:1px solid #1C2D16;border-radius:6px;padding:10px"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     DESIGN PLANS — PIN MODAL
+═══════════════════════════════════════════════ -->
+<div id="designPinModal" class="modal-wrap" style="display:none" onclick="if(event.target===this)closeModal('designPinModal')">
+  <div style="background:#0C0E1A;border:1px solid #C4A26A;border-radius:14px;padding:36px;width:320px;text-align:center" onclick="event.stopPropagation()">
+    <div style="font-size:36px;margin-bottom:10px">📐</div>
+    <h3 style="font-size:18px;font-weight:800;color:#F5EDD8;margin:0 0 6px">Design Plans</h3>
+    <p style="font-size:12px;color:#5A6A8A;margin:0 0 22px">Enter your private PIN to access</p>
+    <input type="password" id="designPinInput" maxlength="4" placeholder="••••"
+      style="width:100%;box-sizing:border-box;text-align:center;font-size:28px;letter-spacing:10px;padding:10px;background:#060810;border:1px solid #1E2840;border-radius:8px;color:#F5EDD8;outline:none"
+      onkeydown="if(event.key==='Enter')checkDesignPin()"
+      oninput="this.value=this.value.replace(/\D/g,'')">
+    <div id="designPinError" style="display:none;color:#F08080;font-size:12px;margin-top:8px">Incorrect PIN — try again</div>
+    <button onclick="checkDesignPin()" class="btn btn-blue" style="width:100%;margin-top:16px;font-size:13px">Unlock →</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     DESIGN PLANS — MAIN MODAL
+═══════════════════════════════════════════════ -->
+<div id="designPlansModal" class="modal-wrap" style="display:none;align-items:flex-start;padding:0;overflow-y:auto" onclick="if(event.target===this)closeModal('designPlansModal')">
+  <div style="background:#0C0E1A;width:100%;max-width:1100px;min-height:100vh;margin:0 auto;padding:24px;display:flex;flex-direction:column;gap:16px" onclick="event.stopPropagation()">
+
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <h2 style="font-size:22px;font-weight:900;color:#C4A26A;margin:0 0 4px">📐 Design Plans</h2>
+        <div style="font-size:12px;color:#5A6A8A">Private — upload, analyze, and route general contractor design plans</div>
+      </div>
+      <button onclick="closeModal('designPlansModal')" style="background:none;border:none;color:#7A8C6A;cursor:pointer;font-size:26px;line-height:1;padding:4px">×</button>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:4px;border-bottom:1px solid #1A2438;padding-bottom:0">
+      <button id="dpTab-plans"   onclick="switchDesignTab('plans')"   style="font-size:12px;padding:8px 16px;border-radius:6px 6px 0 0;cursor:pointer;font-weight:700;border:1px solid #C4A26A;border-bottom:none;background:#1A2438;color:#C4A26A">📁 Plans</button>
+      <button id="dpTab-analyze" onclick="switchDesignTab('analyze')" style="font-size:12px;padding:8px 16px;border-radius:6px 6px 0 0;cursor:pointer;border:1px solid #1A2438;border-bottom:none;background:#0A0C18;color:#5A6A8A">🤖 AI Analyze</button>
+      <button id="dpTab-route"   onclick="switchDesignTab('route')"   style="font-size:12px;padding:8px 16px;border-radius:6px 6px 0 0;cursor:pointer;border:1px solid #1A2438;border-bottom:none;background:#0A0C18;color:#5A6A8A">📐 Route</button>
+    </div>
+
+    <!-- ── PLANS TAB ── -->
+    <div id="dpPanel-plans">
+      <div id="designDropZone"
+        ondrop="handleDesignDrop(event)" ondragover="event.preventDefault();this.style.borderColor='#C4A26A'" ondragleave="this.style.borderColor='#1E3A5A'"
+        onclick="document.getElementById('designFileInput').click()"
+        style="border:2px dashed #1E3A5A;border-radius:10px;padding:32px;text-align:center;cursor:pointer;margin-bottom:16px;transition:border-color .2s">
+        <input type="file" id="designFileInput" accept=".pdf,image/*" multiple style="display:none" onchange="handleDesignFileInput(this)">
+        <div style="font-size:36px;margin-bottom:8px">📄</div>
+        <div style="font-size:14px;font-weight:600;color:#90C8F0">Drop design plans here to upload</div>
+        <div style="font-size:11px;color:#4D5C3D;margin-top:4px">PDF, JPG, PNG · Up to 25MB per file · Multiple at once</div>
+      </div>
+      <div id="designUploadProgress" style="display:none;font-size:12px;color:#90C8F0;text-align:center;padding:6px 0"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:11px;color:#5A6A8A;font-weight:700;letter-spacing:.05em">UPLOADED PLANS</div>
+        <div id="designPlanCount" style="font-size:11px;color:#5A6A8A">0 plans</div>
+      </div>
+      <div id="designPlansGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px"></div>
+    </div>
+
+    <!-- ── ANALYZE TAB ── -->
+    <div id="dpPanel-analyze" style="display:none">
+      <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:200px">
+          <div style="font-size:11px;color:#5A6A8A;font-weight:700;margin-bottom:4px">SELECT PLAN</div>
+          <select id="designAnalyzeSelect" style="width:100%;padding:8px 10px;background:#060810;border:1px solid #1E2840;border-radius:6px;color:#F5EDD8;font-size:13px">
+            <option value="">— choose a plan —</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <button class="btn btn-gray" style="font-size:10px" onclick="setDesignQ('Provide a detailed analysis of this design plan: layout summary, HVAC system requirements, recommended unit placement, BTU load per zone, and any notable specifications or concerns.')">📋 Full Analysis</button>
+          <button class="btn btn-gray" style="font-size:10px" onclick="setDesignQ('Create a complete materials list for the HVAC installation shown. Include: copper line sets (sizes and lengths), fittings and flares, refrigerant type and quantity, electrical wire gauges and lengths, breaker sizes, mounting hardware, line set insulation, condensate drain materials, and any other required items. Provide quantities.')">🔧 Materials List</button>
+          <button class="btn btn-gray" style="font-size:10px" onclick="setDesignQ('Estimate the total materials cost for the HVAC installation shown. Provide a table with columns: Item | Qty | Unit | Est. Unit Cost (Austin TX market 2025) | Line Total. Include copper tubing, fittings, refrigerant, electrical, mounting hardware, insulation, and misc. End with a TOTAL ESTIMATED MATERIALS COST.')">💲 Cost Estimate</button>
+          <button class="btn btn-gray" style="font-size:10px" onclick="setDesignQ('Analyze HVAC load requirements: estimate square footage per zone, BTU requirements, recommended unit sizes (tonnage), and any special conditions like ceiling height, insulation, or heat gain factors.')">❄️ HVAC Load</button>
+          <button class="btn btn-gray" style="font-size:10px" onclick="setDesignQ('Identify the optimal routing paths for all systems: (1) Copper refrigerant lines — from condensers to air handlers, (2) Plumbing — condensate drain routes, (3) Communication/data — thermostat and control wiring, (4) Power/electrical — from panels to units. Describe recommended routes, obstacles, and any code considerations.')">📐 Routing Plan</button>
+        </div>
+      </div>
+      <textarea id="designAnalyzeQ" rows="3" placeholder="Ask anything about the plan — e.g. 'What size copper lines do I need?' or 'How many mini-splits does this building require?'"
+        style="width:100%;box-sizing:border-box;padding:10px;background:#060810;border:1px solid #1E2840;border-radius:8px;color:#F5EDD8;font-size:13px;resize:vertical;margin-bottom:10px"></textarea>
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <button class="btn btn-blue" style="flex:1;font-size:13px" onclick="runDesignAnalysis()" id="designAnalyzeBtn">🤖 Analyze with Claude</button>
+        <button class="btn btn-gray" onclick="document.getElementById('designAnalyzeQ').value=''">Clear</button>
+      </div>
+      <div id="designAnalysisResult" style="display:none;background:#060810;border:1px solid #1E2840;border-radius:10px;padding:16px;font-size:13px;color:#DDD5B8;line-height:1.65;white-space:pre-wrap;max-height:500px;overflow-y:auto"></div>
+      <div id="designAnalysisWarn" style="display:none;margin-top:8px;font-size:11px;color:#7A8C6A;background:#0D1509;border:1px solid #1C2D16;border-radius:6px;padding:10px"></div>
+    </div>
+
+    <!-- ── ROUTE TAB ── -->
+    <div id="dpPanel-route" style="display:none">
+      <!-- Toolbar -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:10px 12px;background:#060810;border:1px solid #1A2438;border-radius:8px;margin-bottom:10px">
+        <div style="display:flex;gap:5px;align-items:center">
+          <span style="font-size:10px;color:#5A6A8A;font-weight:700">SYSTEM:</span>
+          <button id="rsys-copper"        onclick="setRouteSystem('copper')"        style="font-size:10px;padding:4px 9px;background:#EF4444;color:white;border:2px solid #EF4444;border-radius:4px;cursor:pointer;font-weight:700">🔴 Copper</button>
+          <button id="rsys-plumbing"      onclick="setRouteSystem('plumbing')"      style="font-size:10px;padding:4px 9px;background:#0A0C18;color:#3B82F6;border:2px solid #1A2438;border-radius:4px;cursor:pointer">🔵 Plumbing</button>
+          <button id="rsys-communication" onclick="setRouteSystem('communication')" style="font-size:10px;padding:4px 9px;background:#0A0C18;color:#22C55E;border:2px solid #1A2438;border-radius:4px;cursor:pointer">📡 Comm</button>
+          <button id="rsys-power"         onclick="setRouteSystem('power')"         style="font-size:10px;padding:4px 9px;background:#0A0C18;color:#F59E0B;border:2px solid #1A2438;border-radius:4px;cursor:pointer">⚡ Power</button>
+        </div>
+        <div style="display:flex;gap:5px;align-items:center">
+          <span style="font-size:10px;color:#5A6A8A;font-weight:700">TOOL:</span>
+          <button id="rtool-pencil" onclick="setRouteTool('pencil')" style="font-size:10px;padding:4px 9px;background:#1A2438;color:#90C8F0;border:2px solid #90C8F0;border-radius:4px;cursor:pointer;font-weight:700">✏️ Draw</button>
+          <button id="rtool-line"   onclick="setRouteTool('line')"   style="font-size:10px;padding:4px 9px;background:#0A0C18;color:#5A6A8A;border:2px solid #1A2438;border-radius:4px;cursor:pointer">📏 Straight</button>
+          <button id="rtool-erase"  onclick="setRouteTool('erase')"  style="font-size:10px;padding:4px 9px;background:#0A0C18;color:#5A6A8A;border:2px solid #1A2438;border-radius:4px;cursor:pointer">🧹 Erase</button>
+        </div>
+        <div style="display:flex;gap:5px;align-items:center">
+          <span style="font-size:10px;color:#5A6A8A;font-weight:700">WIDTH:</span>
+          <input type="range" id="routeLineWidth" min="1" max="14" value="3" style="width:72px;accent-color:#C4A26A" oninput="ROUTE_STATE.lineWidth=+this.value">
+        </div>
+        <div style="display:flex;gap:5px;align-items:center">
+          <span style="font-size:10px;color:#5A6A8A;font-weight:700">BG PLAN:</span>
+          <select id="routeBgSelect" onchange="loadRouteBg(this.value)" style="padding:4px 7px;background:#060810;border:1px solid #1E2840;border-radius:4px;color:#F5EDD8;font-size:10px">
+            <option value="">None</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:5px;margin-left:auto">
+          <button onclick="routeUndo()"   class="btn btn-gray" style="font-size:10px;padding:4px 10px">↩ Undo</button>
+          <button onclick="routeClear()"  class="btn btn-gray" style="font-size:10px;padding:4px 10px;color:#F08080">🗑 Clear</button>
+          <button onclick="routeExport()" class="btn btn-blue" style="font-size:10px;padding:4px 10px">💾 Save PNG</button>
+        </div>
+      </div>
+      <!-- Legend -->
+      <div style="display:flex;gap:18px;margin-bottom:8px;flex-wrap:wrap">
+        <span style="font-size:11px;color:#EF4444;font-weight:700">● Copper / Refrigerant</span>
+        <span style="font-size:11px;color:#3B82F6;font-weight:700">● Plumbing</span>
+        <span style="font-size:11px;color:#22C55E;font-weight:700">● Communication / Data</span>
+        <span style="font-size:11px;color:#F59E0B;font-weight:700">● Power / Electrical</span>
+      </div>
+      <!-- Canvas -->
+      <div id="routeCanvasWrap" style="position:relative;border:2px solid #1A2438;border-radius:8px;overflow:hidden;line-height:0">
+        <canvas id="routeBgCanvas"   style="position:absolute;top:0;left:0;pointer-events:none"></canvas>
+        <canvas id="routeDrawCanvas" style="display:block;cursor:crosshair"></canvas>
+      </div>
+      <div style="font-size:11px;color:#3A4A6A;margin-top:6px;text-align:center">Click and drag to draw · Use Straight tool for precise lines · Save PNG exports both background and drawing</div>
+    </div>
+
   </div>
 </div>
 
@@ -3138,7 +3277,7 @@ async function analyzePhoto() {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (document.getElementById('lightbox').classList.contains('open')) { closeLightbox(); return; }
-    const modals = ['logModal','scheduleModal','textModal','clubhouseModal','sitePhotosModal','visionModal','aiSearchModal'];
+    const modals = ['logModal','scheduleModal','textModal','clubhouseModal','sitePhotosModal','visionModal','aiSearchModal','designPinModal','designPlansModal'];
     const open = modals.find(id => document.getElementById(id).style.display !== 'none');
     if (open) closeModal(open);
     else if (selectedId) closePanel();
