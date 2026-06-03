@@ -283,8 +283,8 @@
     <!-- Site Photos -->
     <button onclick="openSitePhotos()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0" title="Jobsite photo archive — drag & drop to upload">📷 Site Photos</button>
 
-    <!-- Design Plans (PIN-protected) -->
-    <button onclick="openDesignPlans()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0" title="Private design plans — PIN required">📐 Design Plans</button>
+    <!-- Site Plans (PIN-protected) -->
+    <button onclick="openDesignPlans()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0" title="GOTA site plans — PIN required">🗺️ Site Plans</button>
 
     <!-- Multi-select -->
     <button id="btnMultiSelect" onclick="toggleMultiSelect()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0" title="Select multiple units to bulk-schedule a job">☑ Select Units</button>
@@ -722,7 +722,7 @@
 <div id="designPinModal" class="modal-wrap" style="display:none" onclick="if(event.target===this)closeModal('designPinModal')">
   <div style="background:#0C0E1A;border:1px solid #C4A26A;border-radius:14px;padding:36px;width:320px;text-align:center" onclick="event.stopPropagation()">
     <div style="font-size:36px;margin-bottom:10px">📐</div>
-    <h3 style="font-size:18px;font-weight:800;color:#F5EDD8;margin:0 0 6px">Design Plans</h3>
+    <h3 style="font-size:18px;font-weight:800;color:#F5EDD8;margin:0 0 6px">Site Plans</h3>
     <p style="font-size:12px;color:#5A6A8A;margin:0 0 22px">Enter your private PIN to access</p>
     <input type="password" id="designPinInput" maxlength="4" placeholder="••••"
       style="width:100%;box-sizing:border-box;text-align:center;font-size:28px;letter-spacing:10px;padding:10px;background:#060810;border:1px solid #1E2840;border-radius:8px;color:#F5EDD8;outline:none"
@@ -742,8 +742,8 @@
     <!-- Header -->
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
       <div>
-        <h2 style="font-size:22px;font-weight:900;color:#C4A26A;margin:0 0 4px">📐 Design Plans</h2>
-        <div style="font-size:12px;color:#5A6A8A">Private — upload, analyze, and route general contractor design plans</div>
+        <h2 style="font-size:22px;font-weight:900;color:#C4A26A;margin:0 0 4px">🗺️ Site Plans</h2>
+        <div style="font-size:12px;color:#5A6A8A">Private — GOTA master construction site plans</div>
       </div>
       <button onclick="closeModal('designPlansModal')" style="background:none;border:none;color:#7A8C6A;cursor:pointer;font-size:26px;line-height:1;padding:4px">×</button>
     </div>
@@ -1025,6 +1025,8 @@ async function init() {
           if (!d.techNotes) d.techNotes = '';
           if (!d.scheduledWork) d.scheduledWork = [];
           if (!d.recordings) d.recordings = [];
+          if (!d.designPlans) d.designPlans = [];
+          d.designPlans = d.designPlans.filter(p => isValidStorageUrl(p.url));
           DATA[doc.id] = d;
         });
         localStorage.setItem('gota_hvac_v2', JSON.stringify(DATA));
@@ -1048,6 +1050,8 @@ async function init() {
       // Strip any blob URLs that survived from a previous bad session
       u.photos = u.photos.filter(p => isValidStorageUrl(p.url));
       if (u.mainPhotoUrl && !isValidStorageUrl(u.mainPhotoUrl)) { u.mainPhotoUrl = ''; u.mainPhotoName = ''; }
+      if (!u.designPlans) u.designPlans = [];
+      u.designPlans = u.designPlans.filter(p => isValidStorageUrl(p.url));
     });
   } else {
     buildDefaults();
@@ -1081,7 +1085,7 @@ function buildDefaults() {
       nextServiceType:'', repairCategory:'',
       mainPhotoUrl:'', mainPhotoName:'',
       techNotes:'',
-      ownerName:'', ownerPhone:'', ownerEmail:'', notes:'', photos:[], serviceHistory:[], scheduledWork:[], recordings:[]
+      ownerName:'', ownerPhone:'', ownerEmail:'', notes:'', photos:[], serviceHistory:[], scheduledWork:[], recordings:[], designPlans:[]
     };
   }))));
   Object.entries(SAMPLES).forEach(([id, d]) => { if (DATA[id]) Object.assign(DATA[id], d); });
@@ -1496,6 +1500,7 @@ function drawPanel() {
         <button class="tab-btn ${activeTab==='contractor'?'active':''}" id="tb-contractor" onclick="switchTab('contractor')">🏗 Contractor</button>
         <button class="tab-btn ${activeTab==='schedule'?'active':''}" id="tb-schedule" onclick="switchTab('schedule')">📅 Schedule${(()=>{const p=(u.scheduledWork||[]).filter(i=>i.status!=='completed'&&i.status!=='cancelled').length;return p?' ('+p+')':'';})()}</button>
         <button class="tab-btn ${activeTab==='recordings'?'active':''}" id="tb-recordings" onclick="switchTab('recordings')">🎙 Recordings${(u.recordings||[]).length?' ('+(u.recordings.length)+')':''}</button>
+        <button class="tab-btn ${activeTab==='designs'?'active':''}" id="tb-designs" onclick="switchTab('designs')">📄 Plans${(u.designPlans||[]).length?' ('+(u.designPlans||[]).length+')':''}</button>
       </div>
     </div>
 
@@ -1621,6 +1626,11 @@ function drawPanel() {
       <!-- RECORDINGS -->
       <div class="tab-content ${activeTab==='recordings'?'active':''}" id="tc-recordings">
         ${recordingsTabHtml(u)}
+      </div>
+
+      <!-- UNIT PLANS (PIN-protected) -->
+      <div class="tab-content ${activeTab==='designs'?'active':''}" id="tc-designs">
+        ${unitDesignsTabHtml(u)}
       </div>
 
     </div>`;
@@ -1922,6 +1932,14 @@ function closeLightbox() {
 // TABS
 // ════════════════════════════════════════════════════════════
 function switchTab(tab) {
+  if (tab === 'designs' && !designUnlocked) {
+    designPinCallback = () => switchTab('designs');
+    document.getElementById('designPinInput').value = '';
+    document.getElementById('designPinError').style.display = 'none';
+    document.getElementById('designPinModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('designPinInput').focus(), 100);
+    return;
+  }
   activeTab = tab;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -3649,6 +3667,7 @@ if (authReady) {
 // ════════════════════════════════════════════════════════════
 const DESIGN_PIN = '1021';
 let designUnlocked = false;
+let designPinCallback = null;
 let DESIGN_PLANS = [];
 
 const ROUTE_COLORS = { copper:'#EF4444', plumbing:'#3B82F6', communication:'#22C55E', power:'#F59E0B' };
@@ -3669,7 +3688,13 @@ function checkDesignPin() {
   if (document.getElementById('designPinInput').value.trim() === DESIGN_PIN) {
     designUnlocked = true;
     closeModal('designPinModal');
-    _showDesignModal();
+    if (designPinCallback) {
+      const cb = designPinCallback;
+      designPinCallback = null;
+      cb();
+    } else {
+      _showDesignModal();
+    }
   } else {
     document.getElementById('designPinError').style.display = 'block';
     document.getElementById('designPinInput').value = '';
@@ -4035,6 +4060,154 @@ function loadBgFromPlan(idx) {
   if (!plan || !plan.type?.startsWith('image/')) { showToast('ℹ️', 'Only image files can be used as background — open the PDF in a separate window for reference'); return; }
   const bgSel = document.getElementById('routeBgSelect');
   if (bgSel) { bgSel.value = String(idx); loadRouteBg(idx); }
+}
+
+// ════════════════════════════════════════════════════════════
+// PER-UNIT PLANS TAB
+// ════════════════════════════════════════════════════════════
+
+function unitDesignsTabHtml(u) {
+  const plans = u.designPlans || [];
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:10px;font-weight:800;color:#4D5C3D;letter-spacing:.08em;text-transform:uppercase">GC Buildout Plans</div>
+      <span style="font-size:11px;color:#7A8C6A">${plans.length} plan${plans.length !== 1 ? 's' : ''}</span>
+    </div>
+    <div class="photo-drop-zone" id="unitDesignDrop" onclick="document.getElementById('unitDesignFileInput').click()" style="margin-bottom:14px">
+      <div style="font-size:28px">📄</div>
+      <div style="font-size:13px;font-weight:600;color:#8898B0">Drop plans here or click to upload</div>
+      <div style="font-size:11px;color:#5A6A8A">PDF, PNG, JPG — up to 25 MB each</div>
+    </div>
+    <input type="file" id="unitDesignFileInput" accept=".pdf,image/*" multiple style="display:none" onchange="uploadUnitDesigns(this.files)">
+    <div id="unitDesignProgress" style="display:none;font-size:11px;color:#C4A26A;text-align:center;padding:8px;background:#0A0C16;border-radius:6px;margin-bottom:8px"></div>
+    ${plans.length === 0
+      ? `<div style="text-align:center;padding:28px 16px;color:#4D5C3D">
+           <div style="font-size:32px;margin-bottom:8px">📂</div>
+           <div style="font-size:14px;font-weight:600;color:#7A8C6A">No plans uploaded yet</div>
+           <div style="font-size:12px;margin-top:4px">Upload PDF or image plans sent by your GC.</div>
+         </div>`
+      : `<div style="display:flex;flex-direction:column;gap:10px">
+           ${plans.map((p, i) => unitDesignCard(p, i)).join('')}
+         </div>`}`;
+}
+
+function unitDesignCard(p, i) {
+  const isImg = p.type && p.type.startsWith('image/');
+  const date = p.uploadedAt ? new Date(p.uploadedAt).toLocaleDateString() : '';
+  return `
+    <div style="background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:#DDD5B8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(p.name)}</div>
+          <div style="font-size:11px;color:#7A8C6A;margin-top:2px">${date}${isImg ? ' · Image' : ' · PDF'}</div>
+        </div>
+        <button onclick="deleteUnitDesign(${i})" style="background:none;border:none;color:#F08080;cursor:pointer;font-size:16px;padding:0 0 0 8px;line-height:1;flex-shrink:0" title="Delete">🗑</button>
+      </div>
+      ${isImg
+        ? `<img src="${escAttr(p.url)}" style="width:100%;border-radius:6px;max-height:160px;object-fit:cover;margin-bottom:8px">`
+        : `<div style="background:#07090F;border:1px solid #1E2840;border-radius:6px;padding:10px;text-align:center;margin-bottom:8px">
+             <span style="font-size:24px">📄</span>
+             <div style="font-size:11px;color:#5A6A8A;margin-top:4px">PDF Document</div>
+           </div>`}
+      <div style="display:flex;gap:6px">
+        <a href="${escAttr(p.url)}" target="_blank" class="btn btn-gray" style="font-size:11px;flex:1;text-align:center">📂 Open</a>
+        <button onclick="analyzeUnitDesign(${i},this)" class="btn btn-blue" style="font-size:11px;flex:1">🤖 Analyze</button>
+      </div>
+      <div id="unitDesignAnalysis_${i}" style="display:none;margin-top:8px;padding:10px;background:#07090F;border:1px solid #1E2840;border-radius:6px;font-size:12px;color:#B8C9A0;line-height:1.6;white-space:pre-wrap"></div>
+    </div>`;
+}
+
+async function uploadUnitDesigns(files) {
+  if (!files || !files.length) return;
+  const valid = Array.from(files).filter(f => f.type === 'application/pdf' || f.type.startsWith('image/'));
+  if (!valid.length) { showToast('❌', 'Only PDF or image files accepted'); return; }
+  if (!storage) { showToast('❌', 'Storage not available'); return; }
+  const prog = document.getElementById('unitDesignProgress');
+  if (prog) prog.style.display = 'block';
+  let ok = 0;
+  for (let i = 0; i < valid.length; i++) {
+    const file = valid[i];
+    if (prog) prog.textContent = 'Uploading ' + (i+1) + ' of ' + valid.length + ': ' + file.name + '…';
+    const path = 'units/' + selectedId + '/designs/' + Date.now() + '_' + file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    try {
+      const ref = storage.ref(path);
+      await ref.put(file);
+      const url = await ref.getDownloadURL();
+      if (!DATA[selectedId].designPlans) DATA[selectedId].designPlans = [];
+      DATA[selectedId].designPlans.push({ url, name: file.name, storagePath: path, type: file.type, uploadedAt: new Date().toISOString() });
+      persist();
+      ok++;
+    } catch(e) {
+      console.error('Unit design upload error:', e);
+      showToast('❌', 'Failed: ' + file.name);
+    }
+  }
+  if (prog) prog.style.display = 'none';
+  if (ok) showToast('✅', ok + ' plan' + (ok > 1 ? 's' : '') + ' uploaded');
+  drawPanel(); switchTab('designs');
+}
+
+async function deleteUnitDesign(idx) {
+  const plans = DATA[selectedId]?.designPlans || [];
+  const p = plans[idx];
+  if (!p || !confirm('Delete "' + p.name + '"? This cannot be undone.')) return;
+  if (storage && p.storagePath) { try { await storage.ref(p.storagePath).delete(); } catch(e) {} }
+  DATA[selectedId].designPlans.splice(idx, 1);
+  persist();
+  drawPanel(); switchTab('designs');
+  showToast('🗑', 'Plan deleted');
+}
+
+async function analyzeUnitDesign(idx, btn) {
+  const plans = DATA[selectedId]?.designPlans || [];
+  const plan = plans[idx]; if (!plan) return;
+  if (!ANTHROPIC_API_KEY) {
+    const key = prompt('Enter your Anthropic API key (sk-ant-…):');
+    if (!key || !key.trim().startsWith('sk-')) { showToast('❌', 'Valid API key required'); return; }
+    ANTHROPIC_API_KEY = key.trim(); localStorage.setItem('anthropic_key', ANTHROPIC_API_KEY);
+  }
+  const resultDiv = document.getElementById('unitDesignAnalysis_' + idx);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Analyzing…'; }
+  if (resultDiv) resultDiv.style.display = 'none';
+  try {
+    const resp = await fetch(plan.url);
+    if (!resp.ok) throw new Error('Could not fetch plan (HTTP ' + resp.status + ')');
+    const blob = await resp.blob();
+    const base64 = await new Promise(res => {
+      const reader = new FileReader();
+      reader.onload = e => res(e.target.result.split(',')[1]);
+      reader.readAsDataURL(blob);
+    });
+    const isPdf = plan.type === 'application/pdf';
+    const contentBlock = isPdf
+      ? { type:'document', source:{ type:'base64', media_type:'application/pdf', data:base64 } }
+      : { type:'image', source:{ type:'base64', media_type: plan.type || 'image/jpeg', data:base64 } };
+    const headers = {
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'anthropic-dangerous-direct-browser-client': 'true'
+    };
+    if (isPdf) headers['anthropic-beta'] = 'pdfs-2024-09-25';
+    const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', headers,
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4096,
+        messages: [{ role:'user', content:[
+          contentBlock,
+          { type:'text', text: 'You are an expert HVAC contractor and construction estimator in Austin, TX. The user is Alexander Rodriguez from Avant Development Group working at Garages of the Americas (GOTA). Analyze this GC buildout plan for unit #' + selectedId + '. Identify: 1) HVAC routing paths and challenges, 2) Required materials with estimated quantities, 3) Any conflicts with existing HVAC infrastructure, 4) Estimated labor and material costs. Be specific and practical.' }
+        ]}]
+      })
+    });
+    if (!aiResp.ok) { const err = await aiResp.json().catch(()=>({})); throw new Error(err.error?.message || 'HTTP ' + aiResp.status); }
+    const data = await aiResp.json();
+    if (resultDiv) { resultDiv.textContent = data.content?.[0]?.text || '(no response)'; resultDiv.style.display = 'block'; }
+  } catch(e) {
+    if (resultDiv) { resultDiv.textContent = 'Analysis error: ' + e.message; resultDiv.style.display = 'block'; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🤖 Analyze'; }
+  }
 }
 </script>
 </body></html>
