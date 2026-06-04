@@ -1044,7 +1044,7 @@ async function init() {
   // Fallback: localStorage or fresh defaults
   const saved = localStorage.getItem('gota_hvac_v2');
   if (saved) {
-    DATA = JSON.parse(saved);
+    try { DATA = JSON.parse(saved); } catch(e) { console.warn('Local data corrupt, rebuilding defaults:', e); buildDefaults(); return; }
     Object.values(DATA).forEach(u => {
       if (!u.photos) u.photos = [];
       // Strip any blob URLs that survived from a previous bad session
@@ -1094,7 +1094,7 @@ function buildDefaults() {
 function persist(unitId = selectedId) {
   localStorage.setItem('gota_hvac_v2', JSON.stringify(DATA));
   if (!firestoreReady || !unitId) return;
-  db.collection('units').doc(String(unitId)).set(DATA[unitId])
+  return db.collection('units').doc(String(unitId)).set(DATA[unitId])
     .catch(e => console.error('Firestore save error:', e));
 }
 
@@ -1405,13 +1405,13 @@ function renderList() {
     tr.onmouseleave = () => tr.style.background = '';
     tr.onclick = () => openUnit(u.id);
     tr.innerHTML = `
-      <td style="padding:10px 14px;font-weight:700;color:#F5EDD8">#${u.id}</td>
-      <td style="padding:10px 14px;color:#B8C9A0;font-size:12px">${u.building}</td>
+      <td style="padding:10px 14px;font-weight:700;color:#F5EDD8">#${escHtml(u.id)}</td>
+      <td style="padding:10px 14px;color:#B8C9A0;font-size:12px">${escHtml(u.building)}</td>
       <td style="padding:10px 14px">${badge(u.status)}</td>
-      <td style="padding:10px 14px;color:#DDD5B8;font-size:13px">${u.ownerName||'<span style="color:#4D5C3D">—</span>'}</td>
+      <td style="padding:10px 14px;color:#DDD5B8;font-size:13px">${u.ownerName ? escHtml(u.ownerName) : '<span style="color:#4D5C3D">—</span>'}</td>
       <td style="padding:10px 14px;font-size:12px;color:#7A8C6A">${fmtDate(u.lastService)}</td>
       <td style="padding:10px 14px;font-size:12px;color:${dateColor(u.nextService)}">${fmtDate(u.nextService)||'—'}</td>
-      <td style="padding:10px 14px;font-size:12px;color:#7A8C6A">${u.hvacModel||'<span style="color:#4D5C3D">—</span>'}</td>`;
+      <td style="padding:10px 14px;font-size:12px;color:#7A8C6A">${u.hvacModel ? escHtml(u.hvacModel) : '<span style="color:#4D5C3D">—</span>'}</td>`;
     body.appendChild(tr);
   });
 }
@@ -1472,11 +1472,11 @@ function drawPanel() {
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
         <div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <span style="font-size:26px;font-weight:900;color:#C4A26A">#${u.id}</span>
+            <span style="font-size:26px;font-weight:900;color:#C4A26A">#${escHtml(u.id)}</span>
             ${badge(u.status)}
             <span id="microSave" style="font-size:10px;font-weight:700;color:#A8D878;opacity:0;transition:opacity .35s,transform .35s;transform:translateY(-4px);letter-spacing:.03em">✓ Saved</span>
           </div>
-          <div style="font-size:11px;color:#7A8C6A;margin-top:2px">${u.building} · ${u.size} ft</div>
+          <div style="font-size:11px;color:#7A8C6A;margin-top:2px">${escHtml(u.building)} · ${escHtml(u.size)} ft</div>
         </div>
         <button onclick="closePanel()" style="background:none;border:none;color:#7A8C6A;cursor:pointer;padding:4px;border-radius:6px" onmouseover="this.style.color='#F5EDD8'" onmouseout="this.style.color='#7A8C6A'">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -1864,6 +1864,7 @@ function uploadQueue(files, index, unitId) {
       try {
         const url = await task.snapshot.ref.getDownloadURL();
         const u = DATA[unitId];
+        if (!u) { console.warn('Unit disappeared during upload:', unitId); uploadQueue(files, index + 1, unitId); return; }
         if (!u.photos) u.photos = [];
         const newIdx = u.photos.length;
         u.photos.push({ url, name: file.name, path, date: toISO(new Date()) });
@@ -2186,7 +2187,7 @@ function headUnitRow(h, i) {
 function autoStatus(id) {
   const u = DATA[id];
   if (!u.nextService) return;
-  const diff = (new Date(u.nextService) - new Date()) / 86400000;
+  const diff = (new Date(u.nextService + 'T12:00:00') - new Date()) / 86400000;
   if (diff < 0) u.status = 'overdue';
   else if (diff <= 30) u.status = 'due';
   else u.status = 'good';
@@ -2608,7 +2609,7 @@ function updateStats() {
   document.getElementById('statUnconfig').textContent = all.filter(u=>u.status==='unconfigured').length;
   document.getElementById('statUpcoming').textContent = all.filter(u => {
     if (!u.nextService) return false;
-    const diff = (new Date(u.nextService) - now) / 86400000;
+    const diff = (new Date(u.nextService + 'T12:00:00') - now) / 86400000;
     return diff >= 0 && diff <= 30;
   }).length;
   // Welcome panel stats
@@ -2659,7 +2660,7 @@ function fmtDate(d) {
 // Returns CSS color string (fixed from original — was returning a style attribute)
 function dateColor(d) {
   if (!d) return '#4D5C3D';
-  const diff = (new Date(d) - new Date()) / 86400000;
+  const diff = (new Date(d + 'T12:00:00') - new Date()) / 86400000;
   if (diff < 0) return '#F5A5A0';
   if (diff <= 30) return '#fbbf24';
   return '#B8C9A0';
@@ -2675,7 +2676,9 @@ function escAttr(s) { return String(s).replace(/"/g,'&quot;').replace(/'/g,'&#39
 let toastTimer;
 function showToast(icon, msg) {
   const t = document.getElementById('toast');
-  t.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
+  t.innerHTML = '<span></span><span></span>';
+  t.children[0].textContent = icon;
+  t.children[1].textContent = msg;
   t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
@@ -2822,6 +2825,7 @@ function setClubhouseMainPhoto(idx) {
 async function deleteClubhousePhoto(idx) {
   const p = (CLUBHOUSE.photos||[])[idx];
   if (!p) return;
+  if (!confirm('Delete this photo?')) return;
   if (storage && p.storagePath) {
     try { await storage.ref(p.storagePath).delete(); } catch(e) {}
   }
@@ -2923,6 +2927,7 @@ function renderSitePhotoGrid() {
 async function deleteSitePhoto(idx) {
   const p = SITE_PHOTOS[idx];
   if (!p) return;
+  if (!confirm('Delete this photo?')) return;
   if (storage && p.storagePath) {
     try { await storage.ref(p.storagePath).delete(); } catch(e) {}
   }
@@ -2933,7 +2938,10 @@ async function deleteSitePhoto(idx) {
 
 // Returns true only for permanent Firebase Storage HTTPS URLs — never blob: or empty
 function isValidStorageUrl(url) {
-  return typeof url === 'string' && url.startsWith('https://');
+  return typeof url === 'string' && (
+    url.startsWith('https://firebasestorage.googleapis.com/') ||
+    url.startsWith('https://storage.googleapis.com/')
+  );
 }
 
 function handleSiteDrop(e) {
@@ -3563,7 +3571,10 @@ async function loadAustinWeather() {
       + '&temperature_unit=fahrenheit'
       + '&timezone=America%2FChicago'
       + '&forecast_days=5';
-    const res = await fetch(url);
+    const ctrl = new AbortController();
+    const wxTimeout = setTimeout(() => ctrl.abort(), 5000);
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(wxTimeout);
     const d = await res.json();
     const c = d.current;
     const daily = d.daily;
@@ -3654,12 +3665,10 @@ if (authReady) {
     }
   });
 } else {
-  // Firebase/Auth could not load (e.g. offline) — fall back to local-only mode
-  // so the tool still works on the bench without exposing cloud data.
-  hideLoginGate();
+  // Firebase/Auth could not load — keep login gate visible and show an error.
+  // Never bypass authentication even in offline mode.
   const warn = document.getElementById('loginConfigWarn');
-  if (warn) { warn.style.display = 'block'; warn.textContent = 'Offline mode — cloud sync and login are unavailable.'; }
-  init();
+  if (warn) { warn.style.display = 'block'; warn.textContent = 'Authentication unavailable — check your connection and reload.'; }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -3742,7 +3751,7 @@ async function loadDesignPlans() {
         DESIGN_PLANS = doc.data().plans.filter(p => isValidStorageUrl(p.url));
         localStorage.setItem('gota_design_plans', JSON.stringify(DESIGN_PLANS));
       }
-    } catch(e) {}
+    } catch(e) { console.warn('Design plans load failed:', e); }
   }
   renderDesignGrid();
   populateDesignSelects();
