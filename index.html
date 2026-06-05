@@ -2938,10 +2938,10 @@ async function deleteSitePhoto(idx) {
 
 // Returns true only for permanent Firebase Storage HTTPS URLs — never blob: or empty
 function isValidStorageUrl(url) {
-  return typeof url === 'string' && (
-    url.startsWith('https://firebasestorage.googleapis.com/') ||
-    url.startsWith('https://storage.googleapis.com/')
-  );
+  if (typeof url !== 'string') return false;
+  return url.startsWith('https://firebasestorage.googleapis.com/') ||
+         url.startsWith('https://storage.googleapis.com/') ||
+         url.startsWith('https://avant-access-hub-461ee.firebasestorage.app/');
 }
 
 function handleSiteDrop(e) {
@@ -2977,7 +2977,8 @@ async function uploadSiteFiles(files) {
       successCount++;
     } catch(e) {
       console.error('Site photo upload error:', e);
-      showToast('❌', `Failed to upload ${file.name} — check Firebase Storage rules`);
+      const reason = e.code || e.message || 'unknown error';
+      showToast('❌', `Upload failed: ${reason}`);
     }
   }
   prog.style.display = 'none';
