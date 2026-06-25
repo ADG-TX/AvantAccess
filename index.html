@@ -4267,7 +4267,6 @@ function closeIntakePanel() {
 function startIntakeListener() {
   if (!firestoreReady || intakeUnsubscribe) return;
   intakeUnsubscribe = db.collection('intake_requests')
-    .orderBy('submittedAt', 'desc')
     .onSnapshot(snap => {
       const pending = snap.docs.filter(d => d.data().status === 'pending');
       const badge = document.getElementById('intakeBadge');
@@ -4275,7 +4274,12 @@ function startIntakeListener() {
         badge.textContent = pending.length || '';
         badge.classList.toggle('has-items', pending.length > 0);
       }
-      renderIntakeList(snap.docs);
+      const sorted = snap.docs.slice().sort((a,b) => {
+        const ta = a.data().submittedAt || '';
+        const tb = b.data().submittedAt || '';
+        return tb < ta ? -1 : tb > ta ? 1 : 0;
+      });
+      renderIntakeList(sorted);
     }, err => console.warn('Intake listener:', err));
 }
 
