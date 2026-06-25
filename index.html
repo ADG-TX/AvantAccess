@@ -883,7 +883,10 @@
       <div style="font-size:15px;font-weight:700;color:#C4A26A">Plan Requests</div>
       <div style="font-size:11px;color:#5A6A85;margin-top:2px">Maintenance sign-ups from brochure</div>
     </div>
-    <button onclick="closeIntakePanel()" class="btn btn-gray" style="font-size:12px;padding:4px 10px">✕</button>
+    <div style="display:flex;gap:6px">
+      <button onclick="fetchIntakeRequests()" class="btn btn-gray" style="font-size:11px;padding:4px 10px" title="Refresh">↻</button>
+      <button onclick="closeIntakePanel()" class="btn btn-gray" style="font-size:12px;padding:4px 10px">✕</button>
+    </div>
   </div>
   <div id="intakeList" style="display:flex;flex-direction:column;gap:10px">
     <div style="text-align:center;color:#5A6A85;font-size:12px;padding:40px 0">Loading…</div>
@@ -4258,29 +4261,62 @@ let intakeUnsubscribe = null;
 function openIntakePanel() {
   document.getElementById('intakePanel').classList.add('open');
   document.getElementById('intakeOverlay').style.display = 'block';
+  fetchIntakeRequests();
 }
 function closeIntakePanel() {
   document.getElementById('intakePanel').classList.remove('open');
   document.getElementById('intakeOverlay').style.display = 'none';
 }
 
+async function fetchIntakeRequests() {
+  const list = document.getElementById('intakeList');
+  if (!list) return;
+  if (!firestoreReady) {
+    list.innerHTML = '<div style="color:#F08080;font-size:12px;padding:20px 0;text-align:center">Firestore not ready — check your connection.</div>';
+    return;
+  }
+  try {
+    list.innerHTML = '<div style="text-align:center;color:#5A6A85;font-size:12px;padding:40px 0">Loading…</div>';
+    const snap = await db.collection('intake_requests').get();
+    const docs = snap.docs.slice().sort((a,b) => {
+      const ta = a.data().submittedAt || '';
+      const tb = b.data().submittedAt || '';
+      return tb < ta ? -1 : tb > ta ? 1 : 0;
+    });
+    updateIntakeBadge(docs);
+    renderIntakeList(docs);
+  } catch(err) {
+    console.error('fetchIntakeRequests:', err);
+    list.innerHTML = '<div style="color:#F08080;font-size:12px;padding:20px;background:rgba(192,57,43,0.12);border-radius:8px;border:1px solid #C0392B">' +
+      '<strong>Error loading requests:</strong><br>' + escHtml(err.message || String(err)) + '</div>';
+  }
+}
+
+function updateIntakeBadge(docs) {
+  const pending = docs.filter(d => d.data().status === 'pending');
+  const badge = document.getElementById('intakeBadge');
+  if (badge) {
+    badge.textContent = pending.length || '';
+    badge.classList.toggle('has-items', pending.length > 0);
+  }
+}
+
 function startIntakeListener() {
   if (!firestoreReady || intakeUnsubscribe) return;
   intakeUnsubscribe = db.collection('intake_requests')
     .onSnapshot(snap => {
-      const pending = snap.docs.filter(d => d.data().status === 'pending');
-      const badge = document.getElementById('intakeBadge');
-      if (badge) {
-        badge.textContent = pending.length || '';
-        badge.classList.toggle('has-items', pending.length > 0);
-      }
       const sorted = snap.docs.slice().sort((a,b) => {
         const ta = a.data().submittedAt || '';
         const tb = b.data().submittedAt || '';
         return tb < ta ? -1 : tb > ta ? 1 : 0;
       });
-      renderIntakeList(sorted);
-    }, err => console.warn('Intake listener:', err));
+      updateIntakeBadge(sorted);
+      const panel = document.getElementById('intakePanel');
+      if (panel && panel.classList.contains('open')) renderIntakeList(sorted);
+    }, err => {
+      console.warn('Intake realtime listener failed (will use manual fetch):', err.message);
+      intakeUnsubscribe = null;
+    });
 }
 
 function renderIntakeList(docs) {
@@ -4317,7 +4353,7 @@ function renderIntakeList(docs) {
 function markIntakeDone(docId) {
   if (!firestoreReady) return;
   db.collection('intake_requests').doc(docId).update({ status: 'done' })
-    .then(() => showToast('✓', 'Marked as done'))
+    .then(() => { showToast('✓', 'Marked as done'); fetchIntakeRequests(); })
     .catch(e => console.error('markIntakeDone:', e));
 }
 </script>
