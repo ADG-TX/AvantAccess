@@ -18,8 +18,13 @@
     --muted:#8898B0;
     --line:rgba(196,162,106,0.22);
   }
-  *{margin:0;padding:0;box-sizing:border-box;}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}
   html{scroll-behavior:smooth;}
+  @media print{
+    .test-banner{display:none;}
+    section,header,.footer,.tier,.threat,.guar-box{break-inside:avoid;}
+    .signup{break-before:auto;}
+  }
   body{
     font-family:'Inter',-apple-system,sans-serif;
     color:var(--cream);
