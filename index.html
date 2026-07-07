@@ -1851,6 +1851,10 @@ function customItemsFor(sectionId) {
   return B7_CUSTOM.filter(c => c.section === sectionId);
 }
 
+function unitItemsFor(u, sectionId) {
+  return (u.constructionItems || []).filter(c => c.section === sectionId);
+}
+
 function constApplicableItems(u) {
   const corner = CONST_CORNERS.includes(String(u.id));
   const list = [];
@@ -1860,7 +1864,8 @@ function constApplicableItems(u) {
       if (it.option && !constItem(u, it.key).requested) return; // options only count once optioned
       list.push(it);
     });
-    customItemsFor(sec.id).forEach(it => list.push(it));        // custom items always count
+    customItemsFor(sec.id).forEach(it => list.push(it));        // building-wide custom items always count
+    unitItemsFor(u, sec.id).forEach(it => list.push(it));       // this-unit custom items always count
   });
   return list;
 }
@@ -1872,15 +1877,20 @@ function constProgress(u) {
   return { done, total, pct: total ? Math.round(done / total * 100) : 0 };
 }
 
-function constRowHtml(u, it, isCustom) {
+function constRowHtml(u, it, kind) {
   const d = constItem(u, it.key);
   const isOption = !!it.option;
   const active = !isOption || d.requested;
   const meta = CONST_STATUS[d.status] || CONST_STATUS.not_started;
+  const isCustom = kind === 'building' || kind === 'unit';
+  const delFn = kind === 'unit' ? 'deleteUnitItem' : 'deleteConstCustom';
+  const delTitle = kind === 'unit' ? 'Remove from this unit' : 'Remove from all Building 7 units';
+  const tag = kind === 'building' ? ` <span style="font-size:9px;color:#5A6A85;font-weight:700;letter-spacing:.04em">· ALL UNITS</span>`
+            : kind === 'unit'     ? ` <span style="font-size:9px;color:#8A7455;font-weight:700;letter-spacing:.04em">· THIS UNIT</span>` : '';
   let h = `<div class="cs-item${active ? '' : ' cs-muted'}">
     <div class="cs-row">
-      <span class="cs-label">${escHtml(it.label)}${ isCustom
-        ? ` <span onclick="deleteConstCustom('${it.key}')" title="Remove from all Building 7 units" style="color:#8A5A5A;cursor:pointer;font-weight:800;margin-left:2px">✕</span>`
+      <span class="cs-label">${escHtml(it.label)}${tag}${ isCustom
+        ? ` <span onclick="${delFn}('${it.key}')" title="${delTitle}" style="color:#8A5A5A;cursor:pointer;font-weight:800;margin-left:2px">✕</span>`
         : '' }</span>
       ${ isOption
          ? `<label class="cs-opt"><input type="checkbox" ${d.requested?'checked':''} onchange="toggleConstOption('${it.key}')" style="width:auto;accent-color:#C4A26A"> Owner optioned</label>`
@@ -1914,11 +1924,14 @@ function constructionTabHtml(u) {
 
   CONST_SECTIONS.forEach(sec => {
     const builtins = sec.items.filter(it => !(it.corner && !corner));
-    const customs = customItemsFor(sec.id);
     html += `<div class="cs-section"><div class="cs-section-title">${sec.title}</div>`;
-    builtins.forEach(it => html += constRowHtml(u, it, false));
-    customs.forEach(it => html += constRowHtml(u, it, true));
-    html += `<button class="btn btn-gray" style="width:100%;font-size:11px;margin-top:2px;border-style:dashed;color:#8A7455" onclick="addConstItem('${sec.id}')">+ Add item</button>`;
+    builtins.forEach(it => html += constRowHtml(u, it, 'builtin'));
+    customItemsFor(sec.id).forEach(it => html += constRowHtml(u, it, 'building'));
+    unitItemsFor(u, sec.id).forEach(it => html += constRowHtml(u, it, 'unit'));
+    html += `<div style="display:flex;gap:6px;margin-top:2px">
+      <button class="btn btn-gray" style="flex:1;font-size:10px;border-style:dashed;color:#8A7455" onclick="addConstItem('${sec.id}','all')" title="Add to every Building 7 unit">+ All units</button>
+      <button class="btn btn-gray" style="flex:1;font-size:10px;border-style:dashed;color:#8A7455" onclick="addConstItem('${sec.id}','unit')" title="Add to this unit only">+ This unit</button>
+    </div>`;
     html += `</div>`;
   });
 
@@ -1975,16 +1988,26 @@ function saveConstNote(key, val) {
   showMicroSave();
 }
 
-// ── Building-wide custom items (add / remove / load / save) ──
-function addConstItem(sectionId) {
-  const label = (prompt('New item name (added to every Building 7 unit):') || '').trim();
+// ── Custom items — building-wide OR this-unit-only (add / remove / load / save) ──
+function addConstItem(sectionId, scope) {
+  const u = DATA[selectedId]; if (!u) return;
+  const where = scope === 'unit' ? `unit #${u.id} only` : 'every Building 7 unit';
+  const label = (prompt(`New item name (added to ${where}):`) || '').trim();
   if (!label) return;
-  const key = 'c_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
-  B7_CUSTOM.push({ key, label, section: sectionId });
-  persistB7Custom();
+  const key = (scope === 'unit' ? 'u_' : 'c_') + Date.now() + '_' + Math.floor(Math.random() * 1000);
+  if (scope === 'unit') {
+    if (!u.constructionItems) u.constructionItems = [];
+    u.constructionItems.push({ key, label, section: sectionId });
+    constTouch(u);
+    persist();
+    showToast('➕', `Item added to unit #${u.id}`);
+  } else {
+    B7_CUSTOM.push({ key, label, section: sectionId });
+    persistB7Custom();
+    showToast('➕', 'Item added to all Building 7 units');
+  }
   drawPanel();
   switchTab('construction');
-  showToast('➕', 'Item added to all Building 7 units');
 }
 
 function deleteConstCustom(key) {
@@ -1996,6 +2019,20 @@ function deleteConstCustom(key) {
   drawPanel();
   switchTab('construction');
   showToast('🗑', 'Item removed from Building 7');
+}
+
+function deleteUnitItem(key) {
+  const u = DATA[selectedId]; if (!u || !u.constructionItems) return;
+  const item = u.constructionItems.find(c => c.key === key);
+  if (!item) return;
+  if (!confirm(`Remove "${item.label}" from unit #${u.id}?`)) return;
+  u.constructionItems = u.constructionItems.filter(c => c.key !== key);
+  if (u.construction) delete u.construction[key];
+  constTouch(u);
+  persist();
+  drawPanel();
+  switchTab('construction');
+  showToast('🗑', `Item removed from unit #${u.id}`);
 }
 
 async function loadB7Custom() {
