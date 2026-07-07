@@ -1039,6 +1039,7 @@ let multiSelectMode = false;
 const selectedUnits = new Set();
 let CLUBHOUSE = { notes:'', photos:[], mainPhotoUrl:'', mainPhotoName:'' };
 let SITE_PHOTOS = [];
+let B7_CUSTOM = [];   // building-wide custom construction items (applies to all Bldg 7 units)
 
 // ── Anthropic API key — paste once, stored for the session ──
 let ANTHROPIC_API_KEY = localStorage.getItem('anthropic_key') || '';
@@ -1114,6 +1115,7 @@ async function init() {
   updateStats();
   loadClubhouse();
   loadSitePhotos();
+  loadB7Custom();
   startIntakeListener();
 }
 
@@ -1806,28 +1808,28 @@ function saveContractor() {
 const CONST_CORNERS = ['701','702','713','714'];   // corner garages get custom windows
 
 const CONST_SECTIONS = [
-  { title:'🏠 Roof System', items:[
+  { id:'roof', title:'🏠 Roof System', items:[
     { key:'roofInsulation', label:'Roof insulation' },
     { key:'roofStrapping',  label:'Insulation strapping' },
     { key:'roofFabric',     label:'Insulation retention fabric' },
     { key:'roofPanels',     label:'Roof panels' },
   ]},
-  { title:'🚪 Doors & Windows', items:[
+  { id:'doors', title:'🚪 Doors & Windows', items:[
     { key:'garageDoor',     label:'Garage door install' },
     { key:'pedestrianDoor', label:'Pedestrian door install' },
     { key:'customWindows',  label:'Custom windows', corner:true, option:true, glass:true },
     { key:'windowFlashing', label:'Window flashing tape', corner:true },
   ]},
-  { title:'🔩 Framing & Mechanical', items:[
+  { id:'framing', title:'🔩 Framing & Mechanical', items:[
     { key:'acPlatform',      label:'A/C platform install' },
     { key:'aluminumWall',    label:'Aluminum mechanical-wall framing' },
     { key:'aluminumBracing', label:'Aluminum drywall bracing' },
   ]},
-  { title:'⚡ Electrical', items:[
+  { id:'electrical', title:'⚡ Electrical', items:[
     { key:'electrical', label:'Electrical rough-in' },
     { key:'evOutlet',   label:'EV outlet', option:true },
   ]},
-  { title:'💧 Plumbing', items:[
+  { id:'plumbing', title:'💧 Plumbing', items:[
     { key:'plumbing',    label:'Plumbing rough-in' },
     { key:'waterSpigot', label:'Outdoor water spigot', option:true },
   ]},
@@ -1845,14 +1847,21 @@ function constItem(u, key) {
   return u.construction[key];
 }
 
+function customItemsFor(sectionId) {
+  return B7_CUSTOM.filter(c => c.section === sectionId);
+}
+
 function constApplicableItems(u) {
   const corner = CONST_CORNERS.includes(String(u.id));
   const list = [];
-  CONST_SECTIONS.forEach(sec => sec.items.forEach(it => {
-    if (it.corner && !corner) return;                         // corner-only items skip non-corners
-    if (it.option && !constItem(u, it.key).requested) return; // options only count once optioned
-    list.push(it);
-  }));
+  CONST_SECTIONS.forEach(sec => {
+    sec.items.forEach(it => {
+      if (it.corner && !corner) return;                         // corner-only items skip non-corners
+      if (it.option && !constItem(u, it.key).requested) return; // options only count once optioned
+      list.push(it);
+    });
+    customItemsFor(sec.id).forEach(it => list.push(it));        // custom items always count
+  });
   return list;
 }
 
@@ -1861,6 +1870,33 @@ function constProgress(u) {
   const done = items.filter(it => constItem(u, it.key).status === 'done').length;
   const total = items.length;
   return { done, total, pct: total ? Math.round(done / total * 100) : 0 };
+}
+
+function constRowHtml(u, it, isCustom) {
+  const d = constItem(u, it.key);
+  const isOption = !!it.option;
+  const active = !isOption || d.requested;
+  const meta = CONST_STATUS[d.status] || CONST_STATUS.not_started;
+  let h = `<div class="cs-item${active ? '' : ' cs-muted'}">
+    <div class="cs-row">
+      <span class="cs-label">${escHtml(it.label)}${ isCustom
+        ? ` <span onclick="deleteConstCustom('${it.key}')" title="Remove from all Building 7 units" style="color:#8A5A5A;cursor:pointer;font-weight:800;margin-left:2px">✕</span>`
+        : '' }</span>
+      ${ isOption
+         ? `<label class="cs-opt"><input type="checkbox" ${d.requested?'checked':''} onchange="toggleConstOption('${it.key}')" style="width:auto;accent-color:#C4A26A"> Owner optioned</label>`
+         : '' }
+      ${ active
+         ? `<span class="cs-chip ${meta.cls}" onclick="cycleConst('${it.key}')">${meta.label}</span>`
+         : `<span style="font-size:11px;color:#4D5C3D;white-space:nowrap">Not optioned</span>` }
+    </div>`;
+  if (it.glass && active) {
+    h += `<label class="cs-opt" style="margin-top:8px"><input type="checkbox" ${d.glass?'checked':''} onchange="toggleConstGlass('${it.key}')" style="width:auto;accent-color:#C4A26A"> Custom glass on hand</label>`;
+  }
+  if (active) {
+    h += `<input class="cs-note" placeholder="Note — builder, date, blockers…" value="${escAttr(d.note||'')}" onblur="saveConstNote('${it.key}', this.value)">`;
+  }
+  h += `</div>`;
+  return h;
 }
 
 function constructionTabHtml(u) {
@@ -1877,32 +1913,12 @@ function constructionTabHtml(u) {
     </div>`;
 
   CONST_SECTIONS.forEach(sec => {
-    const items = sec.items.filter(it => !(it.corner && !corner));
-    if (!items.length) return;
+    const builtins = sec.items.filter(it => !(it.corner && !corner));
+    const customs = customItemsFor(sec.id);
     html += `<div class="cs-section"><div class="cs-section-title">${sec.title}</div>`;
-    items.forEach(it => {
-      const d = constItem(u, it.key);
-      const isOption = !!it.option;
-      const active = !isOption || d.requested;
-      const meta = CONST_STATUS[d.status] || CONST_STATUS.not_started;
-      html += `<div class="cs-item${active ? '' : ' cs-muted'}">
-        <div class="cs-row">
-          <span class="cs-label">${escHtml(it.label)}</span>
-          ${ isOption
-             ? `<label class="cs-opt"><input type="checkbox" ${d.requested?'checked':''} onchange="toggleConstOption('${it.key}')" style="width:auto;accent-color:#C4A26A"> Owner optioned</label>`
-             : '' }
-          ${ active
-             ? `<span class="cs-chip ${meta.cls}" onclick="cycleConst('${it.key}')">${meta.label}</span>`
-             : `<span style="font-size:11px;color:#4D5C3D;white-space:nowrap">Not optioned</span>` }
-        </div>`;
-      if (it.glass && active) {
-        html += `<label class="cs-opt" style="margin-top:8px"><input type="checkbox" ${d.glass?'checked':''} onchange="toggleConstGlass('${it.key}')" style="width:auto;accent-color:#C4A26A"> Custom glass on hand</label>`;
-      }
-      if (active) {
-        html += `<input class="cs-note" placeholder="Note — builder, date, blockers…" value="${escAttr(d.note||'')}" onblur="saveConstNote('${it.key}', this.value)">`;
-      }
-      html += `</div>`;
-    });
+    builtins.forEach(it => html += constRowHtml(u, it, false));
+    customs.forEach(it => html += constRowHtml(u, it, true));
+    html += `<button class="btn btn-gray" style="width:100%;font-size:11px;margin-top:2px;border-style:dashed;color:#8A7455" onclick="addConstItem('${sec.id}')">+ Add item</button>`;
     html += `</div>`;
   });
 
@@ -1957,6 +1973,52 @@ function saveConstNote(key, val) {
   constTouch(u);
   persist();
   showMicroSave();
+}
+
+// ── Building-wide custom items (add / remove / load / save) ──
+function addConstItem(sectionId) {
+  const label = (prompt('New item name (added to every Building 7 unit):') || '').trim();
+  if (!label) return;
+  const key = 'c_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+  B7_CUSTOM.push({ key, label, section: sectionId });
+  persistB7Custom();
+  drawPanel();
+  switchTab('construction');
+  showToast('➕', 'Item added to all Building 7 units');
+}
+
+function deleteConstCustom(key) {
+  const item = B7_CUSTOM.find(c => c.key === key);
+  if (!item) return;
+  if (!confirm(`Remove "${item.label}" from ALL Building 7 units? Any progress logged for it will be cleared.`)) return;
+  B7_CUSTOM = B7_CUSTOM.filter(c => c.key !== key);
+  persistB7Custom();
+  drawPanel();
+  switchTab('construction');
+  showToast('🗑', 'Item removed from Building 7');
+}
+
+async function loadB7Custom() {
+  const local = localStorage.getItem('gota_b7_construction');
+  if (local) { try { B7_CUSTOM = JSON.parse(local) || []; } catch(e) {} }
+  if (!firestoreReady) return;
+  try {
+    const doc = await db.collection('properties').doc('bldg7Construction').get();
+    if (doc.exists && Array.isArray(doc.data().customItems)) {
+      B7_CUSTOM = doc.data().customItems;
+      localStorage.setItem('gota_b7_construction', JSON.stringify(B7_CUSTOM));
+      if (selectedId && DATA[selectedId] && DATA[selectedId].building === 'Bldg 7' && activeTab === 'construction') {
+        drawPanel(); switchTab('construction');
+      }
+    }
+  } catch(e) { console.warn('B7 custom items load failed, using local cache:', e); }
+}
+
+function persistB7Custom() {
+  localStorage.setItem('gota_b7_construction', JSON.stringify(B7_CUSTOM));
+  if (!firestoreReady) return;
+  db.collection('properties').doc('bldg7Construction').set({ customItems: B7_CUSTOM })
+    .catch(e => console.error('B7 custom items save error:', e));
 }
 
 function renderPhotoGrid() {
