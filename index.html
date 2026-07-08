@@ -59,6 +59,13 @@
     .cs-fu{background:#241A38;color:#C9AEEA;border-color:#6A4C9C}
     .cs-statsel{font-size:11px;font-weight:700;padding:5px 8px;border-radius:14px;border:1px solid;cursor:pointer;-webkit-appearance:none;appearance:none;text-align:center;text-align-last:center;outline:none}
     .cs-statsel:focus{filter:brightness(1.2)}
+    .cs-photos{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+    .cs-photo{position:relative;width:58px;height:58px;border-radius:6px;overflow:hidden;border:1px solid #1C2D16}
+    .cs-photo img{width:100%;height:100%;object-fit:cover;cursor:pointer;display:block}
+    .cs-photo-del{position:absolute;top:1px;right:1px;background:rgba(0,0,0,.62);border:none;color:#F08080;font-size:9px;font-weight:800;cursor:pointer;border-radius:3px;padding:1px 4px;line-height:1.3}
+    .cs-photo-add{display:flex;flex-direction:column;align-items:center;justify-content:center;width:58px;height:58px;border-radius:6px;border:1px dashed #2A3550;background:#0A0C16;color:#7A8C6A;cursor:pointer;font-size:16px;gap:1px}
+    .cs-photo-add span{font-size:8px;font-weight:700}
+    .cs-photo-add:hover{border-color:#C4A26A;color:#C4A26A}
     .cs-opt{font-size:11px;color:#7A8C6A;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap}
     .cs-note{width:100%;margin-top:8px;font-size:12px;background:#07090F;border:1px solid #1A2438;color:#C8D0E0;border-radius:6px;padding:6px 8px}
     .cs-note:focus{border-color:#C4A26A}
@@ -987,6 +994,28 @@
     <button onclick="addContractorRow()" class="btn btn-tan" style="width:100%;font-size:12px;margin-top:8px">+ Add another contractor</button>
   </div>
 </div>
+
+<!-- ─── Add Install modal ─────────────────────── -->
+<div id="installModal" class="modal-wrap" style="display:none;z-index:140">
+  <div class="modal-box" style="max-width:520px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div id="imTitle" style="font-size:16px;font-weight:800;color:#C4A26A"></div>
+      <button onclick="closeInstallModal()" class="btn btn-gray" style="font-size:12px">✕ Cancel</button>
+    </div>
+    <label style="font-size:10px;font-weight:700;color:#7A8C6A;letter-spacing:.06em">INSTALL / TASK</label>
+    <input id="imLabel" placeholder="e.g. Power to garage-door opener" style="margin:6px 0 14px" onkeydown="if(event.key==='Enter')saveAddInstall()">
+    <div style="font-size:10px;font-weight:700;color:#7A8C6A;margin-bottom:6px">GARAGES GETTING THIS
+      <span onclick="imSetAll(true)" style="color:#C4A26A;cursor:pointer;margin-left:6px">All</span> ·
+      <span onclick="imSetAll(false)" style="color:#C4A26A;cursor:pointer">None</span> ·
+      <span onclick="imSetThis()" style="color:#C4A26A;cursor:pointer">This unit only</span>
+    </div>
+    <div id="imGarages" style="display:flex;flex-wrap:wrap;margin-bottom:14px"></div>
+    <button onclick="saveAddInstall()" class="btn btn-tan" style="width:100%;font-size:13px">Add to selected garages</button>
+  </div>
+</div>
+
+<!-- Hidden input for per-item completed-work photos -->
+<input type="file" id="constPhotoInput" accept="image/*" style="display:none" onchange="handleConstPhotoInput(this.files)">
 
 <!-- Toast -->
 <div id="toast"></div>
@@ -2111,8 +2140,9 @@ function constItem(u, key) {
   return it;
 }
 
-function customItemsFor(sectionId) {
-  return B7_CUSTOM.filter(c => normSection(c.section) === sectionId);
+function customItemsFor(sectionId, unitId) {
+  return B7_CUSTOM.filter(c => normSection(c.section) === sectionId &&
+    (!c.units || c.units.length === 0 || (unitId != null && c.units.includes(String(unitId)))));
 }
 
 function unitItemsFor(u, sectionId) {
@@ -2129,7 +2159,7 @@ function tradeItems(u, tradeId) {
     if (it.option && !constItem(u, it.key).requested) return;
     list.push(it);
   });
-  customItemsFor(tradeId).forEach(it => list.push(it));
+  customItemsFor(tradeId, u.id).forEach(it => list.push(it));
   unitItemsFor(u, tradeId).forEach(it => list.push(it));
   return list;
 }
@@ -2190,7 +2220,7 @@ function constApplicableItems(u) {
       if (it.option && !constItem(u, it.key).requested) return; // options only count once optioned
       list.push(it);
     });
-    customItemsFor(sec.id).forEach(it => list.push(it));        // building-wide custom items always count
+    customItemsFor(sec.id, u.id).forEach(it => list.push(it));  // shared items assigned to this garage
     unitItemsFor(u, sec.id).forEach(it => list.push(it));       // this-unit custom items always count
   });
   return list;
@@ -2210,9 +2240,14 @@ function constRowHtml(u, it, kind) {
   const meta = CONST_STATUS[d.status] || CONST_STATUS.not_started;
   const isCustom = kind === 'building' || kind === 'unit';
   const delFn = kind === 'unit' ? 'deleteUnitItem' : 'deleteConstCustom';
-  const delTitle = kind === 'unit' ? 'Remove from this unit' : 'Remove from all Building 7 units';
-  const tag = kind === 'building' ? ` <span style="font-size:9px;color:#5A6A85;font-weight:700;letter-spacing:.04em">· ALL UNITS</span>`
-            : kind === 'unit'     ? ` <span style="font-size:9px;color:#8A7455;font-weight:700;letter-spacing:.04em">· THIS UNIT</span>` : '';
+  const delTitle = kind === 'unit' ? 'Remove from this unit' : 'Remove this install (all assigned garages)';
+  let tag = '';
+  if (kind === 'building') {
+    const n = (it.units && it.units.length) ? it.units.length : 14;
+    tag = ` <span style="font-size:9px;color:#5A6A85;font-weight:700;letter-spacing:.04em">· ${n === 14 ? 'ALL GARAGES' : n + ' GARAGES'}</span>`;
+  } else if (kind === 'unit') {
+    tag = ` <span style="font-size:9px;color:#8A7455;font-weight:700;letter-spacing:.04em">· THIS UNIT</span>`;
+  }
   let h = `<div class="cs-item${active ? '' : ' cs-muted'}">
     <div class="cs-row">
       <span class="cs-label">${escHtml(it.label)}${tag}${ isCustom
@@ -2230,6 +2265,15 @@ function constRowHtml(u, it, kind) {
   }
   if (active) {
     h += `<input class="cs-note" placeholder="Note — builder, date, blockers…" value="${escAttr(d.note||'')}" onblur="saveConstNote('${it.key}', this.value)">`;
+    // Completed-work photos for THIS garage's copy of the item
+    const photos = d.photos || [];
+    h += `<div class="cs-photos">`;
+    photos.forEach((p, pi) => {
+      h += `<div class="cs-photo"><img src="${escAttr(p.url)}" onclick="openLightbox('${escAttr(p.url)}','${escAttr(escHtml(it.label))}')" alt="">
+        <button class="cs-photo-del" title="Delete photo" onclick="deleteConstPhoto('${it.key}',${pi})">✕</button></div>`;
+    });
+    h += `<button class="cs-photo-add" onclick="triggerConstPhoto('${it.key}')" title="Add a photo of the completed work">📷<span>Add photo</span></button>`;
+    h += `</div>`;
   }
   h += `</div>`;
   return h;
@@ -2290,12 +2334,9 @@ function constructionTabHtml(u) {
     html += `<div class="cs-trade-meta">${bits.join(' &nbsp;·&nbsp; ')}</div>`;
 
     builtins.forEach(it => html += constRowHtml(u, it, 'builtin'));
-    customItemsFor(sec.id).forEach(it => html += constRowHtml(u, it, 'building'));
+    customItemsFor(sec.id, u.id).forEach(it => html += constRowHtml(u, it, 'building'));
     unitItemsFor(u, sec.id).forEach(it => html += constRowHtml(u, it, 'unit'));
-    html += `<div style="display:flex;gap:6px;margin-top:2px">
-      <button class="btn btn-gray" style="flex:1;font-size:10px;border-style:dashed;color:#8A7455" onclick="addConstItem('${sec.id}','all')" title="Add to every Building 7 unit">+ All units</button>
-      <button class="btn btn-gray" style="flex:1;font-size:10px;border-style:dashed;color:#8A7455" onclick="addConstItem('${sec.id}','unit')" title="Add to this unit only">+ This unit</button>
-    </div></div>`;
+    html += `<button class="btn btn-gray" style="width:100%;font-size:11px;margin-top:2px;border-style:dashed;color:#8A7455" onclick="openAddInstallModal('${sec.id}','${u.id}')" title="Add an install/checklist item and pick which garages get it">+ Add install / checklist item</button></div>`;
   });
 
   const upd = u.construction && u.construction._updated;
@@ -2383,6 +2424,95 @@ function saveConstNote(key, val) {
   showMicroSave();
 }
 
+// ── Per-item completed-work photos (each garage keeps its own) ──
+let constPhotoKey = null;
+function triggerConstPhoto(key) {
+  constPhotoKey = key;
+  const inp = document.getElementById('constPhotoInput');
+  if (inp) { inp.value = ''; inp.click(); }
+}
+function handleConstPhotoInput(fileList) {
+  if (!constPhotoKey || !selectedId) return;
+  if (!firebaseReady) { showToast('⚠️', 'Firebase Storage not available'); return; }
+  const files = Array.from(fileList).filter(f => {
+    if (!f.type.startsWith('image/')) { showToast('⚠️', f.name + ' is not an image'); return false; }
+    if (f.size > 15 * 1024 * 1024) { showToast('⚠️', f.name + ' exceeds 15 MB'); return false; }
+    return true;
+  });
+  if (files.length) uploadConstPhotoQueue(files, 0, selectedId, constPhotoKey);
+}
+function uploadConstPhotoQueue(files, index, unitId, key) {
+  if (index >= files.length) { showToast('📷', 'Photo added'); drawPanel(); switchTab('construction'); return; }
+  const file = files[index];
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `units/${unitId}/photos/${Date.now()}_${safeName}`;
+  showToast('⏳', 'Uploading ' + file.name + '…');
+  const ref = storage.ref(path);
+  ref.put(file).then(async () => {
+    const url = await ref.getDownloadURL();
+    const u = DATA[unitId];
+    if (u) {
+      const d = constItem(u, key);
+      if (!d.photos) d.photos = [];
+      d.photos.push({ url, name: file.name, path });
+      constTouch(u);
+      persist(unitId);
+    }
+    uploadConstPhotoQueue(files, index + 1, unitId, key);
+  }).catch(e => {
+    console.error('Construction photo upload error:', e);
+    showToast('❌', 'Upload failed: ' + e.message);
+    uploadConstPhotoQueue(files, index + 1, unitId, key);
+  });
+}
+function deleteConstPhoto(key, pi) {
+  const u = DATA[selectedId]; if (!u) return;
+  const d = constItem(u, key);
+  if (!d.photos || !d.photos[pi]) return;
+  if (!confirm('Delete this photo?')) return;
+  const p = d.photos[pi];
+  d.photos.splice(pi, 1);
+  constTouch(u);
+  persist();
+  drawPanel();
+  switchTab('construction');
+  if (storage && p.path) { storage.ref(p.path).delete().catch(() => {}); }
+}
+
+// ── Add Install modal — define a task and pick which garages get it ──
+let imTrade = null, imUnits = [];
+function openAddInstallModal(tradeId, unitId) {
+  imTrade = tradeId;
+  imUnits = unitId ? [String(unitId)] : [...B7_UNIT_IDS];
+  const sec = CONST_SECTIONS.find(s => s.id === tradeId);
+  document.getElementById('imTitle').textContent = (sec ? sec.emoji + ' ' + sec.label : tradeId) + ' — Add Install';
+  document.getElementById('imLabel').value = '';
+  renderImGarages();
+  document.getElementById('installModal').style.display = 'flex';
+  setTimeout(() => { const el = document.getElementById('imLabel'); if (el) el.focus(); }, 50);
+}
+function closeInstallModal() { document.getElementById('installModal').style.display = 'none'; imTrade = null; }
+function renderImGarages() {
+  const box = document.getElementById('imGarages'); if (!box) return;
+  box.innerHTML = B7_UNIT_IDS.map(id =>
+    `<label style="display:inline-flex;align-items:center;gap:3px;font-size:12px;color:#C8D0E0;margin:3px 8px 3px 0;cursor:pointer"><input type="checkbox" ${imUnits.includes(id)?'checked':''} onchange="imToggle('${id}')" style="width:auto;accent-color:#C4A26A">${id}</label>`).join('');
+}
+function imToggle(id) { const i = imUnits.indexOf(id); if (i >= 0) imUnits.splice(i, 1); else imUnits.push(id); }
+function imSetAll(all) { imUnits = all ? [...B7_UNIT_IDS] : []; renderImGarages(); }
+function imSetThis() { imUnits = selectedId ? [String(selectedId)] : []; renderImGarages(); }
+function saveAddInstall() {
+  const label = (document.getElementById('imLabel').value || '').trim();
+  if (!label) { showToast('⚠️', 'Enter an install name'); return; }
+  if (!imUnits.length) { showToast('⚠️', 'Select at least one garage'); return; }
+  const key = 'c_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+  B7_CUSTOM.push({ key, label, section: imTrade, units: [...imUnits] });
+  persistB7Custom();
+  const n = imUnits.length;
+  closeInstallModal();
+  showToast('➕', label + ' added to ' + n + ' garage' + (n > 1 ? 's' : ''));
+  if (selectedId) { drawPanel(); switchTab('construction'); }
+}
+
 // ── Custom items — building-wide OR this-unit-only (add / remove / load / save) ──
 function addConstItem(sectionId, scope) {
   const u = DATA[selectedId]; if (!u) return;
@@ -2408,7 +2538,7 @@ function addConstItem(sectionId, scope) {
 function deleteConstCustom(key) {
   const item = B7_CUSTOM.find(c => c.key === key);
   if (!item) return;
-  if (!confirm(`Remove "${item.label}" from ALL Building 7 units? Any progress logged for it will be cleared.`)) return;
+  if (!confirm(`Remove the install "${item.label}" from every garage it's assigned to? Progress and photos logged for it will be cleared.`)) return;
   B7_CUSTOM = B7_CUSTOM.filter(c => c.key !== key);
   persistB7Custom();
   drawPanel();
