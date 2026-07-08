@@ -25,6 +25,7 @@
     .unit-overdue   {background:rgba(80,14,8,0.95);border-color:#C0392B;color:#F08080;box-shadow:0 1px 6px rgba(192,57,43,.28)}
     .unit-unconfigured{background:rgba(14,16,28,0.90);border-color:#22304A;color:#5A7090}
     .unit-not_ready  {background:rgba(10,12,22,0.82);border-color:#2A3550;color:#384870}
+    .unit-construction{background:rgba(120,40,90,0.92);border-color:#E86AB0;color:#FBC0E0;box-shadow:0 1px 6px rgba(216,90,160,.30)}
     .unit-selected  {outline:2px solid #C4A26A;outline-offset:2px}
     .unit-dimmed    {opacity:.18;pointer-events:none}
 
@@ -112,6 +113,7 @@
     .btn-red   {background:#5C1209;color:#F08080;border-color:#C0392B}.btn-red:hover{background:#7A1A10}
     .btn-gray  {background:#0E1120;color:#C8D0E0;border-color:#22304A}.btn-gray:hover{background:#161A2E}
     .btn-tan   {background:#6A4420;color:#F5EDD8;border-color:#C4A26A}.btn-tan:hover{background:#8A5A2C}
+    .btn-pink  {background:#5A1A42;color:#FBC0E0;border-color:#E86AB0}.btn-pink:hover{background:#7A2458}
 
     /* ── Modals ── */
     .modal-wrap{position:fixed;inset:0;background:rgba(0,0,0,.82);backdrop-filter:blur(6px);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px}
@@ -395,6 +397,11 @@
       <div style="width:8px;height:8px;border-radius:50%;background:#253A1A;flex-shrink:0"></div>
       <span style="font-size:20px;font-weight:800;color:#7A8C6A" id="statUnconfig">—</span>
       <span style="font-size:11px;color:#7A8C6A">Unconfig</span>
+    </div>
+    <div class="stat-card stat-card-click" onclick="showStatList('construction')" title="View units under construction">
+      <div style="width:8px;height:8px;border-radius:50%;background:#E86AB0;flex-shrink:0"></div>
+      <span style="font-size:20px;font-weight:800;color:#FBC0E0" id="statConstruction">—</span>
+      <span style="font-size:11px;color:#7A8C6A">Under<br>Construction</span>
     </div>
     <div class="stat-card" style="margin-left:4px;border-color:#2D4A1A;background:#0D1509">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="#C4A26A" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
@@ -967,6 +974,18 @@
     <div class="b7-tab" data-view="inspections" onclick="setB7View('inspections')">🔍 Inspections</div>
   </div>
   <div class="b7-body" id="b7Body"></div>
+</div>
+
+<!-- ─── Trade Contractors editor ─────────────────────── -->
+<div id="contractorModal" class="modal-wrap" style="display:none;z-index:140">
+  <div class="modal-box" style="max-width:560px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div id="cmTitle" style="font-size:16px;font-weight:800;color:#C4A26A"></div>
+      <button onclick="closeContractorModal()" class="btn btn-gray" style="font-size:12px">✕ Done</button>
+    </div>
+    <div id="cmBody"></div>
+    <button onclick="addContractorRow()" class="btn btn-tan" style="width:100%;font-size:12px;margin-top:8px">+ Add another contractor</button>
+  </div>
 </div>
 
 <!-- Toast -->
@@ -1674,6 +1693,7 @@ function drawPanel() {
             <button onclick="setStatus('due')" class="btn ${u.status==='due'?'btn-amber':'btn-gray'}" style="font-size:10px">🟡 Work on Soon</button>
             <button onclick="setStatus('overdue')" class="btn ${u.status==='overdue'?'btn-red':'btn-gray'}" style="font-size:10px">🔴 Overdue</button>
             <button onclick="setStatus('not_ready')" class="btn ${u.status==='not_ready'?'btn-tan':'btn-gray'}" style="font-size:10px;border-style:dashed">🚧 Not Ready</button>
+            <button onclick="setStatus('construction')" class="btn ${u.status==='construction'?'btn-pink':'btn-gray'}" style="font-size:10px;grid-column:span 2">🏗 Under Construction</button>
           </div>
         </div>
         <div style="font-size:10px;font-weight:800;color:#4D5C3D;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px">Owner Notes &amp; Reminders</div>
@@ -2145,6 +2165,22 @@ function rosterFor(tradeId) {
   return B7_TRADES[tradeId] || { company:'', foreman:'', phone:'', email:'' };
 }
 
+// Contractors for a trade — a list, each with dates + assigned garages.
+// Migrates the legacy single-contractor roster to the new list shape.
+function tradeContractors(tradeId) {
+  const t = B7_TRADES[tradeId];
+  if (!t) return [];
+  if (Array.isArray(t.contractors)) return t.contractors;
+  const has = t.company || t.foreman || t.phone || t.email;
+  const migrated = has ? [{ id:'m_'+tradeId, company:t.company||'', foreman:t.foreman||'', phone:t.phone||'', email:t.email||'', start:'', end:'', units:[...B7_UNIT_IDS] }] : [];
+  B7_TRADES[tradeId] = { contractors: migrated };
+  return migrated;
+}
+// Contractors assigned to a specific garage for a trade
+function unitContractors(unitId, tradeId) {
+  return tradeContractors(tradeId).filter(c => (c.units || []).includes(String(unitId)));
+}
+
 function constApplicableItems(u) {
   const corner = CONST_CORNERS.includes(String(u.id));
   const list = [];
@@ -2231,7 +2267,7 @@ function constructionTabHtml(u) {
     const st = tradeStatus(u, sec.id);
     const meta = tradeStatusMeta(st);
     const blocked = tradeBlocked(u, sec.id);
-    const r = rosterFor(sec.id);
+    const subs = unitContractors(u.id, sec.id);
     const rec = tradeRec(u, sec.id);
     const builtins = sec.items.filter(it => !(it.corner && !corner));
 
@@ -2242,25 +2278,16 @@ function constructionTabHtml(u) {
         <span class="cs-chip ${meta.cls}" style="cursor:default">${meta.label}</span>
       </div>`;
 
-    const subTxt = r.company || r.foreman;
     const bits = [];
-    if (subTxt) bits.push(`👷 ${escHtml(subTxt)}${r.phone?` <a href="tel:${escAttr(r.phone.replace(/\D/g,''))}" style="color:#90C8F0;text-decoration:none">📞</a>`:''}`);
+    subs.forEach(c => {
+      const nm = c.company || c.foreman || 'Contractor';
+      const dt = (c.start || c.end) ? ` <span style="color:#5A6A85">(${escHtml(c.start||'?')}→${escHtml(c.end||'?')})</span>` : '';
+      bits.push(`👷 ${escHtml(nm)}${c.phone?` <a href="tel:${escAttr(c.phone.replace(/\D/g,''))}" style="color:#90C8F0;text-decoration:none">📞</a>`:''}${dt}`);
+    });
     if (rec.schedStart || rec.schedEnd) bits.push(`🗓 ${escHtml(rec.schedStart||'?')} → ${escHtml(rec.schedEnd||'?')}`);
     if (rec.inspection) bits.push(inspMeta(rec.inspection) + (rec.inspectionDate ? ' ' + escHtml(rec.inspectionDate) : ''));
-    bits.push(`<span onclick="toggleTradeSub('${sec.id}')" style="cursor:pointer;color:#C4A26A;font-weight:700">✏️ ${subTxt ? 'Edit contractor' : 'Add contractor'}</span>`);
+    bits.push(`<span onclick="openContractorModal('${sec.id}','${u.id}')" style="cursor:pointer;color:#C4A26A;font-weight:700">👷 Contractors${subs.length ? ' ('+subs.length+')' : ' +'}</span>`);
     html += `<div class="cs-trade-meta">${bits.join(' &nbsp;·&nbsp; ')}</div>`;
-
-    if (csTradeEdit[sec.id]) {
-      html += `<div style="background:#07090F;border:1px solid #1A2438;border-radius:6px;padding:8px;margin-bottom:8px">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-          <input placeholder="Company" value="${escAttr(r.company||'')}" onchange="saveRosterInline('${sec.id}','company',this.value)" style="font-size:12px">
-          <input placeholder="Foreman / contact" value="${escAttr(r.foreman||'')}" onchange="saveRosterInline('${sec.id}','foreman',this.value)" style="font-size:12px">
-          <input placeholder="Phone" value="${escAttr(r.phone||'')}" onchange="saveRosterInline('${sec.id}','phone',this.value)" style="font-size:12px">
-          <input placeholder="Email" value="${escAttr(r.email||'')}" onchange="saveRosterInline('${sec.id}','email',this.value)" style="font-size:12px">
-        </div>
-        <div style="font-size:9px;color:#5A6A85;margin-top:6px">Shared across all Building 7 units for this trade.</div>
-      </div>`;
-    }
 
     builtins.forEach(it => html += constRowHtml(u, it, 'builtin'));
     customItemsFor(sec.id).forEach(it => html += constRowHtml(u, it, 'building'));
@@ -2559,18 +2586,22 @@ function renderB7Schedule() {
 }
 
 function renderB7Roster() {
-  let h = `<div style="font-size:12px;color:#5A6A85;margin-bottom:12px">Your subs for Building 7 — shared across all 14 units.</div>`;
+  let h = `<div style="font-size:12px;color:#5A6A85;margin-bottom:12px">Contractors for Building 7. Add more than one per trade, give each start/end dates, and choose which garages each one covers.</div>`;
   CONST_SECTIONS.forEach(s => {
-    const r = rosterFor(s.id);
+    const subs = tradeContractors(s.id);
     h += `<div style="background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:12px;margin-bottom:8px">
-      <div style="font-size:13px;font-weight:800;color:#C4A26A;margin-bottom:8px">${s.emoji} ${escHtml(s.label)}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <input placeholder="Company" value="${escAttr(r.company||'')}" onchange="saveRoster('${s.id}','company',this.value)">
-        <input placeholder="Foreman / contact" value="${escAttr(r.foreman||'')}" onchange="saveRoster('${s.id}','foreman',this.value)">
-        <input placeholder="Phone" value="${escAttr(r.phone||'')}" onchange="saveRoster('${s.id}','phone',this.value)">
-        <input placeholder="Email" value="${escAttr(r.email||'')}" onchange="saveRoster('${s.id}','email',this.value)">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:13px;font-weight:800;color:#C4A26A">${s.emoji} ${escHtml(s.label)}</span>
+        <button class="btn btn-tan" style="font-size:11px" onclick="openContractorModal('${s.id}','')">👷 Manage${subs.length ? ' ('+subs.length+')' : ''}</button>
       </div>
-      ${r.phone ? `<a href="tel:${escAttr((r.phone||'').replace(/\D/g,''))}" class="btn btn-gray" style="font-size:11px;margin-top:8px">📞 Call ${escHtml(r.company||r.foreman||'')}</a>` : ''}
+      ${subs.map(c => {
+        const nm = c.company || c.foreman || '(unnamed)';
+        const g = (c.units || []).length;
+        return `<div style="font-size:12px;color:#B8C9A0;padding:6px 0 0;border-top:1px solid #142010;margin-top:8px">
+          <strong style="color:#DDD5B8">${escHtml(nm)}</strong>${c.phone ? ` · <a href="tel:${escAttr(c.phone.replace(/\D/g,''))}" style="color:#90C8F0;text-decoration:none">${escHtml(c.phone)}</a>` : ''}
+          <div style="font-size:11px;color:#7A8C6A;margin-top:2px">${g} garage${g!==1?'s':''}${(c.start||c.end) ? ' · ' + escHtml(c.start||'?') + ' → ' + escHtml(c.end||'?') : ''}</div>
+        </div>`;
+      }).join('')}
     </div>`;
   });
   return h;
@@ -2628,6 +2659,87 @@ function saveRoster(tradeId, field, val) {
   if (!B7_TRADES[tradeId]) B7_TRADES[tradeId] = { company:'', foreman:'', phone:'', email:'' };
   B7_TRADES[tradeId][field] = val;
   persistB7Trades();
+}
+
+// ── Trade contractors modal (multiple contractors, dates, per-garage) ──
+let cmTrade = null, cmUnit = null;
+function openContractorModal(tradeId, unitId) {
+  cmTrade = tradeId;
+  cmUnit = unitId || '';
+  const sec = CONST_SECTIONS.find(s => s.id === tradeId);
+  const t = document.getElementById('cmTitle');
+  if (t) t.textContent = (sec ? sec.emoji + ' ' + sec.label : tradeId) + ' — Contractors';
+  document.getElementById('contractorModal').style.display = 'flex';
+  renderContractorModal();
+}
+function closeContractorModal() {
+  document.getElementById('contractorModal').style.display = 'none';
+  cmTrade = null;
+  if (selectedId && DATA[selectedId] && DATA[selectedId].building === 'Bldg 7') { drawPanel(); switchTab('construction'); }
+  const board = document.getElementById('b7Board');
+  if (board && board.classList.contains('open')) renderB7Board();
+}
+function renderContractorModal() {
+  const body = document.getElementById('cmBody'); if (!body || !cmTrade) return;
+  const list = tradeContractors(cmTrade);
+  body.innerHTML = list.length ? list.map((c, i) => contractorCardHtml(c, i)).join('')
+    : `<div style="font-size:12px;color:#7A8C6A;padding:16px;text-align:center">No contractors yet for this trade. Add one below.</div>`;
+}
+function contractorCardHtml(c, i) {
+  const units = c.units || [];
+  const garages = B7_UNIT_IDS.map(id =>
+    `<label style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#C8D0E0;margin:2px 6px 2px 0;cursor:pointer"><input type="checkbox" ${units.includes(id)?'checked':''} onchange="toggleContractorUnit('${c.id}','${id}')" style="width:auto;accent-color:#C4A26A">${id}</label>`).join('');
+  return `<div style="background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:12px;margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-size:11px;font-weight:800;color:#8A7455">CONTRACTOR ${i+1}</span>
+      <button onclick="removeContractor('${c.id}')" class="btn btn-red" style="font-size:10px;padding:3px 8px">🗑 Remove</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+      <input placeholder="Company" value="${escAttr(c.company||'')}" onchange="updateContractor('${c.id}','company',this.value)">
+      <input placeholder="Foreman / contact" value="${escAttr(c.foreman||'')}" onchange="updateContractor('${c.id}','foreman',this.value)">
+      <input placeholder="Phone" value="${escAttr(c.phone||'')}" onchange="updateContractor('${c.id}','phone',this.value)">
+      <input placeholder="Email" value="${escAttr(c.email||'')}" onchange="updateContractor('${c.id}','email',this.value)">
+      <label style="font-size:10px;color:#7A8C6A">Start <input type="date" value="${escAttr(c.start||'')}" onchange="updateContractor('${c.id}','start',this.value)"></label>
+      <label style="font-size:10px;color:#7A8C6A">End <input type="date" value="${escAttr(c.end||'')}" onchange="updateContractor('${c.id}','end',this.value)"></label>
+    </div>
+    <div style="font-size:10px;font-weight:700;color:#7A8C6A;margin-bottom:4px">GARAGES COVERED
+      <span onclick="setContractorAllUnits('${c.id}',true)" style="color:#C4A26A;cursor:pointer;margin-left:6px">All</span> ·
+      <span onclick="setContractorAllUnits('${c.id}',false)" style="color:#C4A26A;cursor:pointer">None</span>
+    </div>
+    <div style="display:flex;flex-wrap:wrap">${garages}</div>
+  </div>`;
+}
+function addContractorRow() {
+  if (!cmTrade) return;
+  if (!B7_TRADES[cmTrade] || !Array.isArray(B7_TRADES[cmTrade].contractors)) B7_TRADES[cmTrade] = { contractors: tradeContractors(cmTrade) };
+  const id = 'k' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+  B7_TRADES[cmTrade].contractors.push({ id, company:'', foreman:'', phone:'', email:'', start:'', end:'', units: cmUnit ? [String(cmUnit)] : [] });
+  persistB7Trades();
+  renderContractorModal();
+}
+function updateContractor(cid, field, val) {
+  const c = tradeContractors(cmTrade).find(x => x.id === cid); if (!c) return;
+  c[field] = val;
+  persistB7Trades();
+}
+function toggleContractorUnit(cid, unitId) {
+  const c = tradeContractors(cmTrade).find(x => x.id === cid); if (!c) return;
+  if (!c.units) c.units = [];
+  const idx = c.units.indexOf(unitId);
+  if (idx >= 0) c.units.splice(idx, 1); else c.units.push(unitId);
+  persistB7Trades();
+}
+function setContractorAllUnits(cid, all) {
+  const c = tradeContractors(cmTrade).find(x => x.id === cid); if (!c) return;
+  c.units = all ? [...B7_UNIT_IDS] : [];
+  persistB7Trades();
+  renderContractorModal();
+}
+function removeContractor(cid) {
+  if (!cmTrade || !B7_TRADES[cmTrade]) return;
+  B7_TRADES[cmTrade].contractors = tradeContractors(cmTrade).filter(x => x.id !== cid);
+  persistB7Trades();
+  renderContractorModal();
 }
 
 async function loadB7Trades() {
@@ -3088,6 +3200,7 @@ function headUnitRow(h, i) {
 
 function autoStatus(id) {
   const u = DATA[id];
+  if (u.status === 'not_ready' || u.status === 'construction') return; // manual hold statuses
   if (!u.nextService) return;
   const diff = (new Date(u.nextService + 'T12:00:00') - new Date()) / 86400000;
   if (diff < 0) u.status = 'overdue';
@@ -3435,6 +3548,7 @@ function showStatList(status) {
     due:          { title: 'Due Soon',            color: '#fbbf24', dot: '#f59e0b'  },
     overdue:      { title: 'Overdue Units',       color: '#F5A5A0', dot: '#C0392B'  },
     unconfigured: { title: 'Unconfigured Units',  color: '#7A8C6A', dot: '#4D5C3D'  },
+    construction: { title: 'Under Construction',  color: '#FBC0E0', dot: '#E86AB0'  },
   }[status] || { title: status, color: '#DDD5B8', dot: '#4D5C3D' };
 
   const units = Object.values(DATA)
@@ -3509,6 +3623,8 @@ function updateStats() {
   document.getElementById('statDue').textContent = d;
   document.getElementById('statOverdue').textContent = o;
   document.getElementById('statUnconfig').textContent = all.filter(u=>u.status==='unconfigured').length;
+  const scEl = document.getElementById('statConstruction');
+  if (scEl) scEl.textContent = all.filter(u=>u.status==='construction').length;
   document.getElementById('statUpcoming').textContent = all.filter(u => {
     if (!u.nextService) return false;
     const diff = (new Date(u.nextService + 'T12:00:00') - now) / 86400000;
@@ -3548,6 +3664,7 @@ function badge(s) {
     overdue:      ['#5C1209','#C0392B','#F5A5A0','🔴 Overdue'],
     not_ready:    ['#0D1509','#4D5C3D','#4D5C3D','🚧 Not Ready'],
     unconfigured: ['#111A0D','#253A1A','#7A8C6A','⬜ Unconfigured'],
+    construction: ['#3A0E2A','#E86AB0','#FBC0E0','🏗 Under Construction'],
   };
   const [bg,bc,tc,lbl] = map[s]||map.unconfigured;
   return `<span style="background:${bg};border:1px solid ${bc};color:${tc};border-radius:20px;padding:2px 9px;font-size:10px;font-weight:700;white-space:nowrap">${lbl}</span>`;
