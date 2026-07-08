@@ -1483,7 +1483,8 @@ function openUnit(id) {
   panel.style.display = 'block';
   const welcome = document.getElementById('welcomePanel');
   if (welcome) welcome.style.display = 'none';
-  activeTab = 'overview';
+  // Building 7 is under construction — open straight to the Build tracker.
+  activeTab = (DATA[id] && DATA[id].building === 'Bldg 7') ? 'construction' : 'overview';
   drawPanel();
   setupAutoSave();
 }
@@ -1506,6 +1507,7 @@ function drawPanel() {
   }
 
   const photoCount = (u.photos || []).length;
+  const isB7 = u.building === 'Bldg 7';
 
   panel.innerHTML = `
     <!-- Hero Photo -->
@@ -1547,6 +1549,7 @@ function drawPanel() {
 
       <!-- Tabs -->
       <div style="display:flex;border-bottom:1px solid #1C2D16;overflow-x:auto">
+        ${isB7 ? `<button class="tab-btn ${activeTab==='construction'?'active':''}" id="tb-construction" onclick="switchTab('construction')" style="color:${activeTab==='construction'?'#C4A26A':'#E0A040'}">🚧 Build (${constProgress(u).pct}%)</button>` : ''}
         <button class="tab-btn ${activeTab==='overview'?'active':''}" id="tb-overview" onclick="switchTab('overview')">Overview</button>
         <button class="tab-btn ${activeTab==='hvac'?'active':''}" id="tb-hvac" onclick="switchTab('hvac')">HVAC System</button>
         <button class="tab-btn ${activeTab==='owner'?'active':''}" id="tb-owner" onclick="switchTab('owner')">Owner</button>
@@ -1672,6 +1675,11 @@ function drawPanel() {
       <div class="tab-content ${activeTab==='contractor'?'active':''}" id="tc-contractor">
         ${contractorTabHtml(u)}
       </div>
+
+      <!-- CONSTRUCTION (Bldg 7 only) -->
+      ${isB7 ? `<div class="tab-content ${activeTab==='construction'?'active':''}" id="tc-construction">
+        ${constructionTabHtml(u)}
+      </div>` : ''}
 
       <!-- SCHEDULE -->
       <div class="tab-content ${activeTab==='schedule'?'active':''}" id="tc-schedule">
