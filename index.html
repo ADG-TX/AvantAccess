@@ -66,6 +66,10 @@
     .cs-photo-add{display:flex;flex-direction:column;align-items:center;justify-content:center;width:58px;height:58px;border-radius:6px;border:1px dashed #2A3550;background:#0A0C16;color:#7A8C6A;cursor:pointer;font-size:16px;gap:1px}
     .cs-photo-add span{font-size:8px;font-weight:700}
     .cs-photo-add:hover{border-color:#C4A26A;color:#C4A26A}
+    /* Wide detail panel: flow cards/sections into responsive columns */
+    .sum-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:10px;align-items:start}
+    .cs-sections-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;align-items:start}
+    .cs-sections-grid .cs-section{margin-bottom:0}
     .cs-opt{font-size:11px;color:#7A8C6A;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap}
     .cs-note{width:100%;margin-top:8px;font-size:12px;background:#07090F;border:1px solid #1A2438;color:#C8D0E0;border-radius:6px;padding:6px 8px}
     .cs-note:focus{border-color:#C4A26A}
@@ -482,7 +486,7 @@
   </div>
 
   <!-- ── DETAIL PANEL ── -->
-  <div id="detailPanel" style="width:430px;flex-shrink:0;border-left:1px solid rgba(196,162,106,0.20);background:rgba(5,4,3,0.92);overflow-y:auto;display:none;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)"></div>
+  <div id="detailPanel" style="width:64%;min-width:420px;max-width:1040px;flex-shrink:0;border-left:1px solid rgba(196,162,106,0.20);background:rgba(5,4,3,0.92);overflow-y:auto;display:none;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)"></div>
 </div>
 
 <!-- ═══════════════════════════════════════════════
@@ -1888,6 +1892,8 @@ function summaryTabHtml(u) {
     </div>
   </div>`;
 
+  h += `<div class="sum-cards">`;
+
   // Construction (Building 7)
   if (isB7) {
     const p = constProgress(u);
@@ -1998,6 +2004,7 @@ function summaryTabHtml(u) {
     );
   }
 
+  h += `</div>`;
   return h;
 }
 
@@ -2307,6 +2314,7 @@ function constructionTabHtml(u) {
       <div class="cs-bar"><div class="cs-bar-fill" style="width:${p.pct}%"></div></div>
     </div>`;
 
+  html += `<div class="cs-sections-grid">`;
   CONST_SECTIONS.forEach(sec => {
     const st = tradeStatus(u, sec.id);
     const meta = tradeStatusMeta(st);
@@ -2338,6 +2346,7 @@ function constructionTabHtml(u) {
     unitItemsFor(u, sec.id).forEach(it => html += constRowHtml(u, it, 'unit'));
     html += `<button class="btn btn-gray" style="width:100%;font-size:11px;margin-top:2px;border-style:dashed;color:#8A7455" onclick="openAddInstallModal('${sec.id}','${u.id}')" title="Add an install/checklist item and pick which garages get it">+ Add install / checklist item</button></div>`;
   });
+  html += `</div>`;
 
   const upd = u.construction && u.construction._updated;
   html += `<div style="font-size:10px;color:#4D5C3D;text-align:center;margin-top:8px">${
