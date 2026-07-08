@@ -53,6 +53,11 @@
     .cs-ns{background:#161B28;color:#AEBAD0;border-color:#3A4864}
     .cs-ip{background:#4A360C;color:#F5C840;border-color:#E08800}
     .cs-dn{background:#14431F;color:#A8E878;border-color:#3A7A22}
+    .cs-gb{background:#3A0E08;color:#F5A5A0;border-color:#C0392B}
+    .cs-in{background:#0E2438;color:#90C8F0;border-color:#2A5878}
+    .cs-fu{background:#241A38;color:#C9AEEA;border-color:#6A4C9C}
+    .cs-statsel{font-size:11px;font-weight:700;padding:5px 8px;border-radius:14px;border:1px solid;cursor:pointer;-webkit-appearance:none;appearance:none;text-align:center;text-align-last:center;outline:none}
+    .cs-statsel:focus{filter:brightness(1.2)}
     .cs-opt{font-size:11px;color:#7A8C6A;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap}
     .cs-note{width:100%;margin-top:8px;font-size:12px;background:#07090F;border:1px solid #1A2438;color:#C8D0E0;border-radius:6px;padding:6px 8px}
     .cs-note:focus{border-color:#C4A26A}
@@ -77,6 +82,7 @@
     .b7-c-done{background:#14431F;border-color:#3A7A22}
     .b7-c-ip{background:#4A360C;border-color:#E08800}
     .b7-c-ns{background:#161B28;border-color:#2A3550}
+    .b7-c-att{background:#5C1209;border-color:#C0392B}
     .b7-c-none{background:#0A0C16;border-color:#161B28}
     .b7-c-blocked{box-shadow:0 0 0 2px #C0392B inset}
     .b7-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px;font-size:11px;color:#8898B0}
@@ -1838,9 +1844,9 @@ function summaryTabHtml(u) {
     const p = constProgress(u);
     const dots = CONST_SECTIONS.map(s => {
       const st = tradeStatus(u, s.id);
-      const c = st === 'done' ? '#14431F' : st === 'in_progress' ? '#4A360C' : st === 'not_started' ? '#161B28' : '#0A0C16';
-      const bd = st === 'done' ? '#3A7A22' : st === 'in_progress' ? '#E08800' : '#2A3550';
-      return `<span title="${escAttr(s.label)} — ${tradeStatusMeta(st).label}" style="width:20px;height:20px;border-radius:4px;background:${c};border:1px solid ${bd};display:inline-flex;align-items:center;justify-content:center;font-size:10px">${s.emoji}</span>`;
+      const c = st === 'done' ? '#14431F' : st === 'attention' ? '#3A0E08' : st === 'in_progress' ? '#4A360C' : st === 'not_started' ? '#161B28' : '#0A0C16';
+      const bd = st === 'done' ? '#3A7A22' : st === 'attention' ? '#C0392B' : st === 'in_progress' ? '#E08800' : '#2A3550';
+      return `<span onclick="openTradeSection('${s.id}')" title="${escAttr(s.label)} — ${tradeStatusMeta(st).label} (tap to open)" style="width:22px;height:22px;border-radius:4px;background:${c};border:1px solid ${bd};display:inline-flex;align-items:center;justify-content:center;font-size:11px;cursor:pointer">${s.emoji}</span>`;
     }).join('');
     h += card(
       lbl('🚧 Construction Progress') +
@@ -2063,16 +2069,26 @@ const CONST_SECTIONS = [
 // Old section id → new (only 'roof' was renamed) so pre-existing custom items don't orphan
 function normSection(id) { return id === 'roof' ? 'roofing' : id; }
 
-const CONST_STATUS = {
-  not_started:{ label:'Not started', cls:'cs-ns', next:'in_progress' },
-  in_progress:{ label:'In progress', cls:'cs-ip', next:'done' },
-  done:       { label:'Done',        cls:'cs-dn', next:'not_started' },
-};
+const CS_STATUSES = [
+  { v:'not_started', label:'Not started', cls:'cs-ns' },
+  { v:'incomplete',  label:'Incomplete',  cls:'cs-ip' },
+  { v:'finished',    label:'Finished',    cls:'cs-dn' },
+  { v:'goback',      label:'Go back to',  cls:'cs-gb' },
+  { v:'inspect',     label:'Inspect',     cls:'cs-in' },
+  { v:'followup',    label:'Follow Up',   cls:'cs-fu' },
+];
+const CONST_STATUS = {};
+CS_STATUSES.forEach(s => CONST_STATUS[s.v] = s);
+function statusMeta(v) { return CONST_STATUS[v] || CONST_STATUS.not_started; }
 
 function constItem(u, key) {
   if (!u.construction) u.construction = {};
   if (!u.construction[key]) u.construction[key] = { status:'not_started', note:'', requested:false, glass:false };
-  return u.construction[key];
+  const it = u.construction[key];
+  // migrate legacy 3-state values to the new set
+  if (it.status === 'in_progress') it.status = 'incomplete';
+  else if (it.status === 'done')   it.status = 'finished';
+  return it;
 }
 
 function customItemsFor(sectionId) {
@@ -2102,8 +2118,9 @@ function tradeStatus(u, tradeId) {
   const items = tradeItems(u, tradeId);
   if (!items.length) return 'none';
   const st = items.map(it => constItem(u, it.key).status);
-  if (st.every(s => s === 'done')) return 'done';
-  if (st.some(s => s === 'in_progress' || s === 'done')) return 'in_progress';
+  if (st.some(s => s === 'goback')) return 'attention';
+  if (st.every(s => s === 'finished')) return 'done';
+  if (st.some(s => s !== 'not_started')) return 'in_progress';
   return 'not_started';
 }
 
@@ -2114,7 +2131,7 @@ function tradeBlocked(u, tradeId) {
   const sec = CONST_SECTIONS.find(s => s.id === tradeId);
   if (!sec) return false;
   return CONST_SECTIONS.some(s2 => s2.phase < sec.phase &&
-    ['not_started', 'in_progress'].includes(tradeStatus(u, s2.id)));
+    !['done', 'none'].includes(tradeStatus(u, s2.id)));
 }
 
 // Per-unit, per-trade record (schedule + inspection + note)
@@ -2145,7 +2162,7 @@ function constApplicableItems(u) {
 
 function constProgress(u) {
   const items = constApplicableItems(u);
-  const done = items.filter(it => constItem(u, it.key).status === 'done').length;
+  const done = items.filter(it => constItem(u, it.key).status === 'finished').length;
   const total = items.length;
   return { done, total, pct: total ? Math.round(done / total * 100) : 0 };
 }
@@ -2169,7 +2186,7 @@ function constRowHtml(u, it, kind) {
          ? `<label class="cs-opt"><input type="checkbox" ${d.requested?'checked':''} onchange="toggleConstOption('${it.key}')" style="width:auto;accent-color:#C4A26A"> Owner optioned</label>`
          : '' }
       ${ active
-         ? `<span class="cs-chip ${meta.cls}" onclick="cycleConst('${it.key}')">${meta.label}</span>`
+         ? `<select class="cs-statsel ${meta.cls}" onchange="setConstStatus('${it.key}',this.value)">${CS_STATUSES.map(s => `<option value="${s.v}" ${s.v === d.status ? 'selected' : ''}>${s.label}</option>`).join('')}</select>`
          : `<span style="font-size:11px;color:#4D5C3D;white-space:nowrap">Not optioned</span>` }
     </div>`;
   if (it.glass && active) {
@@ -2183,7 +2200,8 @@ function constRowHtml(u, it, kind) {
 }
 
 function tradeStatusMeta(st) {
-  return st === 'done'        ? { label:'Done',        cls:'cs-dn' }
+  return st === 'done'        ? { label:'Finished',    cls:'cs-dn' }
+       : st === 'attention'   ? { label:'Go back',     cls:'cs-gb' }
        : st === 'in_progress' ? { label:'In progress', cls:'cs-ip' }
        : st === 'not_started' ? { label:'Not started', cls:'cs-ns' }
        :                        { label:'—',           cls:'cs-ns' };
@@ -2217,7 +2235,7 @@ function constructionTabHtml(u) {
     const rec = tradeRec(u, sec.id);
     const builtins = sec.items.filter(it => !(it.corner && !corner));
 
-    html += `<div class="cs-section">
+    html += `<div class="cs-section" id="cs-sec-${sec.id}">
       <div class="cs-trade-head">
         <span class="cs-trade-name">${sec.emoji} ${escHtml(sec.label)}</span>
         ${blocked ? `<span class="cs-blocked">⛔ BLOCKED</span>` : ''}
@@ -2229,7 +2247,20 @@ function constructionTabHtml(u) {
     if (subTxt) bits.push(`👷 ${escHtml(subTxt)}${r.phone?` <a href="tel:${escAttr(r.phone.replace(/\D/g,''))}" style="color:#90C8F0;text-decoration:none">📞</a>`:''}`);
     if (rec.schedStart || rec.schedEnd) bits.push(`🗓 ${escHtml(rec.schedStart||'?')} → ${escHtml(rec.schedEnd||'?')}`);
     if (rec.inspection) bits.push(inspMeta(rec.inspection) + (rec.inspectionDate ? ' ' + escHtml(rec.inspectionDate) : ''));
-    if (bits.length) html += `<div class="cs-trade-meta">${bits.join(' &nbsp;·&nbsp; ')}</div>`;
+    bits.push(`<span onclick="toggleTradeSub('${sec.id}')" style="cursor:pointer;color:#C4A26A;font-weight:700">✏️ ${subTxt ? 'Edit contractor' : 'Add contractor'}</span>`);
+    html += `<div class="cs-trade-meta">${bits.join(' &nbsp;·&nbsp; ')}</div>`;
+
+    if (csTradeEdit[sec.id]) {
+      html += `<div style="background:#07090F;border:1px solid #1A2438;border-radius:6px;padding:8px;margin-bottom:8px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <input placeholder="Company" value="${escAttr(r.company||'')}" onchange="saveRosterInline('${sec.id}','company',this.value)" style="font-size:12px">
+          <input placeholder="Foreman / contact" value="${escAttr(r.foreman||'')}" onchange="saveRosterInline('${sec.id}','foreman',this.value)" style="font-size:12px">
+          <input placeholder="Phone" value="${escAttr(r.phone||'')}" onchange="saveRosterInline('${sec.id}','phone',this.value)" style="font-size:12px">
+          <input placeholder="Email" value="${escAttr(r.email||'')}" onchange="saveRosterInline('${sec.id}','email',this.value)" style="font-size:12px">
+        </div>
+        <div style="font-size:9px;color:#5A6A85;margin-top:6px">Shared across all Building 7 units for this trade.</div>
+      </div>`;
+    }
 
     builtins.forEach(it => html += constRowHtml(u, it, 'builtin'));
     customItemsFor(sec.id).forEach(it => html += constRowHtml(u, it, 'building'));
@@ -2252,15 +2283,47 @@ function constTouch(u) {
   u.construction._updated = new Date().toISOString();
 }
 
-function cycleConst(key) {
+function setConstStatus(key, val) {
   const u = DATA[selectedId]; if (!u) return;
-  const d = constItem(u, key);
-  d.status = (CONST_STATUS[d.status] || CONST_STATUS.not_started).next;
+  constItem(u, key).status = val;
   constTouch(u);
   persist();
   drawPanel();
   switchTab('construction');
   refreshCell(selectedId);
+}
+
+function cycleConst(key) {
+  const u = DATA[selectedId]; if (!u) return;
+  const d = constItem(u, key);
+  const i = CS_STATUSES.findIndex(s => s.v === d.status);
+  d.status = CS_STATUSES[(i + 1) % CS_STATUSES.length].v;
+  constTouch(u);
+  persist();
+  drawPanel();
+  switchTab('construction');
+  refreshCell(selectedId);
+}
+
+// Inline per-trade contractor editor (writes to the building-wide roster)
+let csTradeEdit = {};
+function toggleTradeSub(tradeId) {
+  csTradeEdit[tradeId] = !csTradeEdit[tradeId];
+  drawPanel();
+  switchTab('construction');
+}
+function saveRosterInline(tradeId, field, val) {
+  saveRoster(tradeId, field, val);
+  drawPanel();
+  switchTab('construction');
+}
+// Jump from a trade icon to that trade's section in the Build tab
+function openTradeSection(tradeId) {
+  switchTab('construction');
+  setTimeout(() => {
+    const el = document.getElementById('cs-sec-' + tradeId);
+    if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+  }, 60);
 }
 
 function toggleConstOption(key) {
@@ -2387,12 +2450,13 @@ function openB7Cell(unitId) {
 }
 function setB7SchedTrade(t) { b7SchedTrade = t; renderB7Board(); }
 function setB7InspTrade(t)  { b7InspTrade  = t; renderB7Board(); }
+function b7HeaderClick(tradeId) { b7SchedTrade = tradeId; setB7View('schedule'); }
 
 function buildingTradePct(tradeId) {
   let done = 0, total = 0;
   B7_UNIT_IDS.forEach(id => {
     const u = DATA[id]; if (!u) return;
-    tradeItems(u, tradeId).forEach(it => { total++; if (constItem(u, it.key).status === 'done') done++; });
+    tradeItems(u, tradeId).forEach(it => { total++; if (constItem(u, it.key).status === 'finished') done++; });
   });
   return total ? Math.round(done / total * 100) : 0;
 }
@@ -2439,7 +2503,7 @@ function renderB7Board() {
 function renderB7Grid() {
   let h = '<div style="overflow-x:auto"><table class="b7-grid"><thead><tr><th></th>';
   CONST_SECTIONS.forEach(s => {
-    h += `<th title="${escAttr(s.label)}">${s.emoji}<br><span style="color:#5A6A85">${buildingTradePct(s.id)}%</span></th>`;
+    h += `<th title="${escAttr(s.label)} — tap to schedule this trade" style="cursor:pointer" onclick="b7HeaderClick('${s.id}')">${s.emoji}<br><span style="color:#5A6A85">${buildingTradePct(s.id)}%</span></th>`;
   });
   h += '</tr></thead><tbody>';
   B7_UNIT_IDS.forEach(id => {
@@ -2448,15 +2512,16 @@ function renderB7Grid() {
     CONST_SECTIONS.forEach(s => {
       if (!u) { h += '<td><div class="b7-cell b7-c-none"></div></td>'; return; }
       const st = tradeStatus(u, s.id), blk = tradeBlocked(u, s.id);
-      const cls = st === 'done' ? 'b7-c-done' : st === 'in_progress' ? 'b7-c-ip' : st === 'not_started' ? 'b7-c-ns' : 'b7-c-none';
+      const cls = st === 'done' ? 'b7-c-done' : st === 'attention' ? 'b7-c-att' : st === 'in_progress' ? 'b7-c-ip' : st === 'not_started' ? 'b7-c-ns' : 'b7-c-none';
       h += `<td><div class="b7-cell ${cls}${blk ? ' b7-c-blocked' : ''}" title="Unit ${id} · ${escAttr(s.label)} · ${tradeStatusMeta(st).label}${blk ? ' (blocked)' : ''}" onclick="openB7Cell('${id}')"></div></td>`;
     });
     h += '</tr>';
   });
   h += '</tbody></table></div>';
   h += `<div class="b7-legend">
-    <span><i class="b7-swatch b7-c-done"></i>Done</span>
+    <span><i class="b7-swatch b7-c-done"></i>Finished</span>
     <span><i class="b7-swatch b7-c-ip"></i>In progress</span>
+    <span><i class="b7-swatch b7-c-att"></i>Go back / rework</span>
     <span><i class="b7-swatch b7-c-ns"></i>Not started</span>
     <span><i class="b7-swatch b7-c-none"></i>N/A this unit</span>
     <span><i class="b7-swatch b7-c-blocked" style="background:#161B28"></i>Blocked (earlier phase unfinished)</span>
