@@ -107,6 +107,28 @@
     .b7-alert{background:#3A0E08;border:1px solid #C0392B;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#F5C0BC}
     .b7-ok{background:#0E2818;border:1px solid #3A7A22;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#A8E878}
 
+    /* ── TASK LIST ── */
+    #taskList{position:fixed;inset:0;z-index:125;background:#07090F;display:none;flex-direction:column}
+    #taskList.open{display:flex}
+    .tl-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid rgba(229,255,0,0.22);background:#0A0C16}
+    .tl-tabs{display:flex;gap:4px;padding:8px 12px;border-bottom:1px solid #1C2D16;overflow-x:auto;background:#0A0C16}
+    .tl-tab{font-size:12px;font-weight:700;color:#7888A8;padding:7px 14px;border-radius:6px;cursor:pointer;white-space:nowrap;border:1px solid transparent}
+    .tl-tab.active{color:#0A0C0F;background:#E5FF00}
+    .tl-body{flex:1;overflow:auto;padding:16px;max-width:920px;margin:0 auto;width:100%}
+    .tl-sec-title{font-size:12px;font-weight:800;color:#8A7455;letter-spacing:.06em;text-transform:uppercase;margin:16px 0 8px}
+    .tl-task{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#0D1509;border:1px solid #1C2D16;border-radius:8px;margin-bottom:6px}
+    .tl-task.done .tl-task-text{text-decoration:line-through;color:#5A6A85}
+    .tl-task-text{flex:1;min-width:0;font-size:13px;color:#DDD5B8;word-break:break-word}
+    .tl-task-meta{font-size:10px;color:#7A8C6A;white-space:nowrap}
+    .tl-overdue{color:#F08080;font-weight:700}
+    .tl-chk{width:20px;height:20px;flex-shrink:0;accent-color:#3A7A22;cursor:pointer}
+    .tl-del{color:#8A5A5A;cursor:pointer;font-weight:800;font-size:13px;background:none;border:none;flex-shrink:0}
+    .tl-addrow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+    .tl-addrow input,.tl-addrow select{background:#07090F;border:1px solid #1A2438;color:#F5EDD8;border-radius:6px;padding:8px 10px;font-size:13px}
+    .tl-person{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;background:#0D1509;border:1px solid #1C2D16;border-radius:8px;margin-bottom:6px}
+    .tl-card{background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:12px;margin-bottom:10px}
+    .tl-joblog-img{max-width:100%;max-height:260px;border-radius:8px;margin-top:8px;display:block;border:1px solid #1C2D16}
+
     /* ── Inputs ── */
     input,textarea,select{
       background:#0E1120;border:1px solid #1E2840;color:#F5EDD8;
@@ -365,6 +387,9 @@
 
     <!-- Site Plans (PIN-protected) -->
     <button onclick="openDesignPlans()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0" title="GOTA site plans — PIN required">🗺️ Site Plans</button>
+
+    <!-- Task List -->
+    <button onclick="openTaskList()" class="btn" style="font-size:11px;padding:5px 14px;flex-shrink:0;font-weight:800;color:#0A0C0F;background:#E5FF00;border-color:#B8CC00;box-shadow:0 0 10px rgba(229,255,0,.45)" title="Task list & job progress log">📋 TASK LIST</button>
 
     <!-- Multi-select -->
     <button id="btnMultiSelect" onclick="toggleMultiSelect()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0" title="Select multiple units to bulk-schedule a job">☑ Select Units</button>
@@ -1021,6 +1046,26 @@
 <!-- Hidden input for per-item completed-work photos -->
 <input type="file" id="constPhotoInput" accept="image/*" style="display:none" onchange="handleConstPhotoInput(this.files)">
 
+<!-- ─── TASK LIST (task tracker + job progress log) ─────────────────────── -->
+<div id="taskList">
+  <div class="tl-head">
+    <div>
+      <div style="font-size:16px;font-weight:800;color:#E5FF00">📋 TASK LIST</div>
+      <div style="font-size:11px;color:#7A8C6A;margin-top:2px" id="tlSaveStatus">—</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="saveTaskList(true)" class="btn btn-tan" style="font-size:12px;padding:6px 14px">💾 Save</button>
+      <button onclick="closeTaskList()" class="btn btn-gray" style="font-size:12px;padding:6px 12px">✕ Close</button>
+    </div>
+  </div>
+  <div class="tl-tabs" id="tlTabs">
+    <div class="tl-tab active" data-view="today" onclick="setTlView('today')">📅 Today</div>
+    <div class="tl-tab" data-view="people" onclick="setTlView('people')">👥 People</div>
+    <div class="tl-tab" data-view="joblog" onclick="setTlView('joblog')">🏗 Job Log</div>
+  </div>
+  <div class="tl-body" id="tlBody"></div>
+</div>
+
 <!-- Toast -->
 <div id="toast"></div>
 
@@ -1226,6 +1271,7 @@ async function init() {
   loadSitePhotos();
   loadB7Custom();
   loadB7Trades();
+  loadTaskList();
   startIntakeListener();
 }
 
@@ -2899,6 +2945,235 @@ function persistB7Trades() {
   db.collection('properties').doc('bldg7Trades').set({ roster: B7_TRADES })
     .catch(e => console.error('B7 trades save error:', e));
 }
+
+// ════════════════════════════════════════════════════════════
+// TASK LIST — task tracker (people + tasks) and job progress log
+// ════════════════════════════════════════════════════════════
+let TASK_DATA = { people: [], tasks: [], jobLog: [] };
+let tlView = 'today';
+
+function tlUid(pfx) { return (pfx || 't') + Date.now() + '_' + Math.floor(Math.random() * 10000); }
+function tlTodayISO() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function tlNowTime() { return new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); }
+function tlPersonName(id) {
+  if (!id || id === 'unassigned') return 'Unassigned';
+  const p = TASK_DATA.people.find(x => x.id === id);
+  return p ? p.name : 'Unassigned';
+}
+function tlTaskOverdue(t) { return t.due && !t.done && t.due < tlTodayISO(); }
+function tlPeopleOptions(sel) {
+  return `<option value="unassigned" ${!sel || sel === 'unassigned' ? 'selected' : ''}>Unassigned</option>` +
+    TASK_DATA.people.map(p => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${escHtml(p.name)}</option>`).join('');
+}
+function tlNormalize(d) {
+  d = d || {};
+  return {
+    people: Array.isArray(d.people) ? d.people : [],
+    tasks:  Array.isArray(d.tasks)  ? d.tasks  : [],
+    jobLog: Array.isArray(d.jobLog) ? d.jobLog : [],
+  };
+}
+
+// ── open / close / views ──
+function openTaskList() { document.getElementById('taskList').classList.add('open'); setTlView('today'); }
+function closeTaskList() { document.getElementById('taskList').classList.remove('open'); }
+function setTlView(v) {
+  tlView = v;
+  document.querySelectorAll('#tlTabs .tl-tab').forEach(t => t.classList.toggle('active', t.dataset.view === v));
+  renderTaskList();
+}
+function renderTaskList() {
+  const body = document.getElementById('tlBody'); if (!body) return;
+  body.innerHTML = tlView === 'today' ? renderTlToday()
+                 : tlView === 'people' ? renderTlPeople()
+                 :                       renderTlJobLog();
+}
+
+// ── save / load ──
+function tlStatus(msg) { const el = document.getElementById('tlSaveStatus'); if (el) el.textContent = msg; }
+function saveTaskList(manual) {
+  localStorage.setItem('gota_tasklist', JSON.stringify(TASK_DATA));
+  tlStatus('Saving…');
+  if (!firestoreReady) {
+    tlStatus('Saved on this device · ' + tlNowTime());
+    if (manual) showToast('💾', 'Saved on this device');
+    return;
+  }
+  db.collection('properties').doc('taskList').set(TASK_DATA)
+    .then(() => { tlStatus('Saved at ' + tlNowTime()); if (manual) showToast('💾', 'Task list saved'); })
+    .catch(e => { console.error('Task list save error:', e); tlStatus('Save failed — kept on this device'); });
+}
+async function loadTaskList() {
+  const local = localStorage.getItem('gota_tasklist');
+  if (local) { try { TASK_DATA = tlNormalize(JSON.parse(local)); } catch(e) {} }
+  if (!firestoreReady) return;
+  try {
+    const doc = await db.collection('properties').doc('taskList').get();
+    if (doc.exists) {
+      TASK_DATA = tlNormalize(doc.data());
+      localStorage.setItem('gota_tasklist', JSON.stringify(TASK_DATA));
+      const panel = document.getElementById('taskList');
+      if (panel && panel.classList.contains('open')) renderTaskList();
+    }
+  } catch(e) { console.warn('Task list load failed, using local cache:', e); }
+}
+
+// ── render: Today ──
+function renderTlToday() {
+  const t = TASK_DATA.tasks;
+  const overdue = t.filter(tlTaskOverdue).sort((a, b) => a.due < b.due ? -1 : 1);
+  const today   = t.filter(x => x.due === tlTodayISO()).sort((a, b) => (a.done - b.done));
+  const noDue   = t.filter(x => !x.due).sort((a, b) => (a.done - b.done));
+  let h = `<div class="tl-addrow">
+    <input id="tlNewTask" placeholder="New task…" style="flex:2;min-width:150px" onkeydown="if(event.key==='Enter')tlAddTask()">
+    <select id="tlNewPerson" style="flex:1;min-width:120px">${tlPeopleOptions('unassigned')}</select>
+    <input type="date" id="tlNewDue" style="flex:1;min-width:130px">
+    <button class="btn btn-tan" style="font-size:12px" onclick="tlAddTask()">+ Add</button>
+  </div>`;
+  h += tlGroup('⛔ Overdue', overdue, 'Nothing overdue.');
+  h += tlGroup('📅 Due Today', today, 'Nothing due today.');
+  h += tlGroup('📌 No Due Date', noDue, 'No undated tasks.');
+  return h;
+}
+function tlGroup(title, list, empty) {
+  let h = `<div class="tl-sec-title">${title} (${list.length})</div>`;
+  if (!list.length) return h + `<div style="font-size:12px;color:#5A6A85;margin-bottom:8px">${empty}</div>`;
+  return h + list.map(tlTaskRow).join('');
+}
+function tlTaskRow(t) {
+  const od = tlTaskOverdue(t);
+  const due = t.due ? `<span class="tl-task-meta ${od ? 'tl-overdue' : ''}">${od ? '⚠ ' : ''}${fmtDate(t.due)}</span>` : '';
+  return `<div class="tl-task ${t.done ? 'done' : ''}">
+    <input type="checkbox" class="tl-chk" ${t.done ? 'checked' : ''} onchange="tlToggleTask('${t.id}')">
+    <span class="tl-task-text">${escHtml(t.text)}</span>
+    <span class="tl-task-meta">👤 ${escHtml(tlPersonName(t.person))}</span>
+    ${due}
+    <button class="tl-del" title="Delete task" onclick="tlDeleteTask('${t.id}')">✕</button>
+  </div>`;
+}
+
+// ── render: People ──
+function renderTlPeople() {
+  let h = `<div class="tl-addrow">
+    <input id="tlNewPersonName" placeholder="Add a person (name)…" style="flex:1;min-width:160px" onkeydown="if(event.key==='Enter')tlAddPerson()">
+    <button class="btn btn-tan" style="font-size:12px" onclick="tlAddPerson()">+ Add Person</button>
+  </div>`;
+  h += `<div class="tl-sec-title">People (${TASK_DATA.people.length})</div>`;
+  if (!TASK_DATA.people.length) h += `<div style="font-size:12px;color:#5A6A85;margin-bottom:8px">No people yet — add one above.</div>`;
+  TASK_DATA.people.forEach(p => {
+    const n = TASK_DATA.tasks.filter(t => t.person === p.id).length;
+    h += `<div class="tl-person">
+      <span style="font-weight:700;color:#DDD5B8">${escHtml(p.name)} <span style="font-size:11px;color:#7A8C6A">· ${n} task${n !== 1 ? 's' : ''}</span></span>
+      <button class="tl-del" onclick="tlDeletePerson('${p.id}')" title="Delete person">🗑</button>
+    </div>`;
+  });
+  const buckets = TASK_DATA.people.map(p => ({ id: p.id, name: p.name })).concat([{ id: 'unassigned', name: 'Unassigned' }]);
+  buckets.forEach(b => {
+    const list = TASK_DATA.tasks.filter(t => (t.person || 'unassigned') === b.id).sort((a, c) => (a.done - c.done));
+    if (b.id === 'unassigned' && !list.length) return;
+    h += `<div class="tl-sec-title">${escHtml(b.name)} (${list.length})</div>`;
+    h += list.length ? list.map(tlTaskRow).join('') : `<div style="font-size:12px;color:#5A6A85;margin-bottom:6px">No tasks.</div>`;
+    h += `<div class="tl-addrow" style="margin-top:4px">
+      <input id="tlpn_${b.id}" placeholder="Add task for ${escAttr(b.name)}…" style="flex:2;min-width:140px" onkeydown="if(event.key==='Enter')tlAddTaskFor('${b.id}')">
+      <input type="date" id="tlpd_${b.id}" style="flex:1;min-width:130px">
+      <button class="btn btn-gray" style="font-size:11px" onclick="tlAddTaskFor('${b.id}')">+ Add</button>
+    </div>`;
+  });
+  return h;
+}
+
+// ── render: Job Log ──
+function renderTlJobLog() {
+  const inp = 'background:#07090F;border:1px solid #1A2438;color:#F5EDD8;border-radius:6px;padding:8px 10px;font-size:13px';
+  let h = `<div class="tl-card">
+    <div class="tl-sec-title" style="margin-top:0">Log a Job Update</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <input id="tlJob" placeholder="Job / unit name" style="${inp}">
+      <input type="date" id="tlJobDate" value="${tlTodayISO()}" style="${inp}">
+    </div>
+    <textarea id="tlJobNote" placeholder="Note / update…" style="width:100%;margin-top:8px;${inp};min-height:60px;resize:vertical"></textarea>
+    <input id="tlJobPhoto" placeholder="Photo URL — paste a link from Google Photos/Drive" style="width:100%;margin-top:8px;${inp}">
+    <button class="btn btn-tan" style="width:100%;font-size:13px;margin-top:8px" onclick="tlAddJob()">+ Add Log Entry</button>
+  </div>`;
+  const log = [...TASK_DATA.jobLog].sort((a, b) => {
+    const da = a.date || '', db = b.date || '';
+    if (da !== db) return da < db ? 1 : -1;
+    return (b.created || 0) - (a.created || 0);
+  });
+  h += `<div class="tl-sec-title">Log (${log.length})</div>`;
+  if (!log.length) h += `<div style="font-size:12px;color:#5A6A85">No entries yet.</div>`;
+  log.forEach(e => {
+    h += `<div class="tl-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div><div style="font-size:14px;font-weight:800;color:#C4A26A">${escHtml(e.job || '—')}</div>
+        <div style="font-size:11px;color:#7A8C6A">${e.date ? fmtDate(e.date) : ''}</div></div>
+        <button class="tl-del" onclick="tlDeleteJob('${e.id}')" title="Delete entry">🗑</button>
+      </div>
+      ${e.note ? `<div style="font-size:13px;color:#DDD5B8;margin-top:6px;white-space:pre-wrap">${escHtml(e.note)}</div>` : ''}
+      ${tlJobPhoto(e.photo)}
+    </div>`;
+  });
+  return h;
+}
+function tlJobPhoto(url) {
+  if (!url) return '';
+  const u = url.trim();
+  const isImg = /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(u);
+  if (isImg) {
+    return `<img class="tl-joblog-img" src="${escAttr(u)}" alt="job photo" onclick="openLightbox('${escAttr(u)}','Job photo')" style="cursor:zoom-in" onerror="this.replaceWith(Object.assign(document.createElement('a'),{href:this.src,target:'_blank',rel:'noopener',textContent:'🔗 Open photo link',style:'color:#90C8F0;font-size:12px;display:inline-block;margin-top:8px;word-break:break-all'}))">`;
+  }
+  return `<a href="${escAttr(u)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;color:#90C8F0;font-size:12px;word-break:break-all">🔗 ${escHtml(u)}</a>`;
+}
+
+// ── CRUD ──
+function tlAddTask() {
+  const el = document.getElementById('tlNewTask'); const text = (el.value || '').trim(); if (!text) return;
+  const person = (document.getElementById('tlNewPerson') || {}).value || 'unassigned';
+  const due = (document.getElementById('tlNewDue') || {}).value || '';
+  TASK_DATA.tasks.push({ id: tlUid(), text, person, due, done: false, created: Date.now() });
+  saveTaskList(); renderTaskList();
+}
+function tlAddTaskFor(personId) {
+  const el = document.getElementById('tlpn_' + personId); if (!el) return;
+  const text = (el.value || '').trim(); if (!text) return;
+  const due = (document.getElementById('tlpd_' + personId) || {}).value || '';
+  TASK_DATA.tasks.push({ id: tlUid(), text, person: personId, due, done: false, created: Date.now() });
+  saveTaskList(); renderTaskList();
+}
+function tlToggleTask(id) { const t = TASK_DATA.tasks.find(x => x.id === id); if (!t) return; t.done = !t.done; saveTaskList(); renderTaskList(); }
+function tlDeleteTask(id) { TASK_DATA.tasks = TASK_DATA.tasks.filter(x => x.id !== id); saveTaskList(); renderTaskList(); }
+function tlAddPerson() {
+  const el = document.getElementById('tlNewPersonName'); const name = (el.value || '').trim(); if (!name) return;
+  TASK_DATA.people.push({ id: tlUid('p'), name });
+  saveTaskList(); renderTaskList();
+}
+function tlDeletePerson(id) {
+  const p = TASK_DATA.people.find(x => x.id === id); if (!p) return;
+  const n = TASK_DATA.tasks.filter(t => t.person === id).length;
+  if (n > 0) {
+    const del = confirm(`"${p.name}" has ${n} task${n > 1 ? 's' : ''}.\n\nOK  = delete ${p.name} AND their tasks\nCancel = keep the tasks, reassign them to Unassigned`);
+    if (del) TASK_DATA.tasks = TASK_DATA.tasks.filter(t => t.person !== id);
+    else TASK_DATA.tasks.forEach(t => { if (t.person === id) t.person = 'unassigned'; });
+  } else {
+    if (!confirm(`Delete "${p.name}"?`)) return;
+  }
+  TASK_DATA.people = TASK_DATA.people.filter(x => x.id !== id);
+  saveTaskList(); renderTaskList();
+}
+function tlAddJob() {
+  const job = (document.getElementById('tlJob').value || '').trim();
+  const date = document.getElementById('tlJobDate').value || tlTodayISO();
+  const note = (document.getElementById('tlJobNote').value || '').trim();
+  const photo = (document.getElementById('tlJobPhoto').value || '').trim();
+  if (!job && !note && !photo) { showToast('⚠️', 'Enter a job name or note'); return; }
+  TASK_DATA.jobLog.push({ id: tlUid('j'), job, date, note, photo, created: Date.now() });
+  saveTaskList(); renderTaskList();
+  showToast('🏗', 'Log entry added');
+}
+function tlDeleteJob(id) { if (!confirm('Delete this log entry?')) return; TASK_DATA.jobLog = TASK_DATA.jobLog.filter(x => x.id !== id); saveTaskList(); renderTaskList(); }
 
 function renderPhotoGrid() {
   const grid = document.getElementById('photoGrid');
