@@ -127,6 +127,15 @@
     .tl-addrow input,.tl-addrow select{background:#07090F;border:1px solid #1A2438;color:#F5EDD8;border-radius:6px;padding:8px 10px;font-size:13px}
     .tl-person{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;background:#0D1509;border:1px solid #1C2D16;border-radius:8px;margin-bottom:6px}
     .tl-card{background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:12px;margin-bottom:10px}
+    /* Department colour filter chips */
+    .tl-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+    .tl-chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:#8898B0;background:#0D1509;border:1px solid #1C2D16;border-radius:20px;padding:6px 12px;cursor:pointer;white-space:nowrap;transition:border-color .15s,color .15s}
+    .tl-chip i{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0}
+    .tl-chip:hover{color:#DDD5B8;border-color:#3A4864}
+    .tl-chip.on{color:#0A0C0F;background:#E5FF00;border-color:#B8CC00}
+    .tl-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+    .tl-star{background:none;border:none;cursor:pointer;font-size:15px;color:#5A6A85;flex-shrink:0;line-height:1}
+    .tl-star.on{color:#F5A5A0}
     .tl-joblog-img{max-width:100%;max-height:260px;border-radius:8px;margin-top:8px;display:block;border:1px solid #1C2D16}
 
     /* ── Inputs ── */
@@ -210,6 +219,14 @@
       /* Give tap targets a comfortable minimum */
       .btn{min-height:34px}
       .tl-chk{width:24px;height:24px}
+      /* Task rows: text gets the full width beside the checkbox, and the
+         person/priority/due meta wraps onto its own line instead of
+         squeezing the title into a 3-word column. */
+      .tl-task{flex-wrap:wrap;row-gap:4px}
+      .tl-task-text{flex:1 1 calc(100% - 34px)}
+      .tl-task-meta{font-size:10px}
+      .tl-del{margin-left:auto}
+      .tl-head .btn{padding:6px 9px;font-size:11px}
       /* Modals sit near the top so the on-screen keyboard doesn't hide inputs */
       .modal-wrap{align-items:flex-start;padding:10px}
       .modal-box{padding:16px;max-height:94vh}
@@ -1095,9 +1112,13 @@
       <div style="font-size:16px;font-weight:800;color:#E5FF00">📋 TASK LIST</div>
       <div style="font-size:11px;color:#7A8C6A;margin-top:2px" id="tlSaveStatus">—</div>
     </div>
-    <div style="display:flex;gap:8px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button onclick="saveTaskList(true)" class="btn btn-tan" style="font-size:12px;padding:6px 14px">💾 Save</button>
+      <button onclick="tlExport()" class="btn btn-gray" style="font-size:12px;padding:6px 10px" title="Download a backup file of everything">⬇️ Export</button>
+      <button onclick="document.getElementById('tlImportFile').click()" class="btn btn-gray" style="font-size:12px;padding:6px 10px" title="Merge a backup file back in">⬆️ Import</button>
+      <button onclick="tlRestore()" class="btn btn-gray" style="font-size:12px;padding:6px 10px" title="Restore from an automatic local backup">↩️ Backups</button>
       <button onclick="closeTaskList()" class="btn btn-gray" style="font-size:12px;padding:6px 12px">✕ Close</button>
+      <input type="file" id="tlImportFile" accept="application/json,.json" style="display:none" onchange="tlImport(this)">
     </div>
   </div>
   <div class="tl-tabs" id="tlTabs">
@@ -1146,6 +1167,11 @@ let appBooted = false;
     storage = firebase.storage();
     firebaseReady = true;
     db = firebase.firestore();
+    // Offline persistence: queues writes made while offline and replays them
+    // when the connection returns, so a dropped signal never loses an edit.
+    // Must be called before any other Firestore call.
+    db.enablePersistence({ synchronizeTabs: true })
+      .catch(e => console.warn('Firestore offline persistence unavailable:', e.code));
     firestoreReady = true;
     auth = firebase.auth();
     authReady = true;
@@ -2991,8 +3017,37 @@ function persistB7Trades() {
 // ════════════════════════════════════════════════════════════
 // TASK LIST — task tracker (people + tasks) and job progress log
 // ════════════════════════════════════════════════════════════
-let TASK_DATA = { people: [], tasks: [], jobLog: [] };
+let TASK_DATA = { people: [], tasks: [], jobLog: [], updatedAt: 0 };
 let tlView = 'today';
+let tlFilter = 'all';          // department filter on the Today / People views
+let tlUnsub = null;            // live Firestore listener
+let tlLoaded = false;          // has the local cache been read into memory yet?
+const TL_KEY = 'gota_tasklist';
+const TL_BAK = 'gota_tasklist_backups';
+
+// ── Departments & colors ──
+// Red is reserved for priority people (Tim & Alex) and always wins over the
+// department color, so the most important lists stand out at a glance.
+const TL_PRIORITY_COLOR = '#F5A5A0';
+const TL_PRIORITY_NAMES = ['tim', 'alex'];
+const TL_DEPTS = [
+  { v: 'Contractors', color: '#F5C840', dot: '🟡' },
+  { v: 'Management',  color: '#90C8F0', dot: '🔵' },
+  { v: 'Facilities',  color: '#90D060', dot: '🟢' },
+  { v: 'Owners',      color: '#C4A26A', dot: '🟤' },
+];
+function tlDept(v) { return TL_DEPTS.find(d => d.v === v) || TL_DEPTS[0]; }
+function tlIsPriorityName(name) {
+  const n = String(name || '').trim().toLowerCase();
+  return TL_PRIORITY_NAMES.some(p => n === p || n.startsWith(p + ' '));
+}
+function tlPersonColor(p) {
+  if (!p) return '#7A8C6A';
+  return p.priorityPerson ? TL_PRIORITY_COLOR : tlDept(p.department).color;
+}
+function tlDeptOptions(sel) {
+  return TL_DEPTS.map(d => `<option value="${d.v}" ${d.v === sel ? 'selected' : ''}>${d.dot} ${d.v}</option>`).join('');
+}
 
 function tlUid(pfx) { return (pfx || 't') + Date.now() + '_' + Math.floor(Math.random() * 10000); }
 function tlTodayISO() {
@@ -3000,92 +3055,347 @@ function tlTodayISO() {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 function tlNowTime() { return new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); }
+function tlPerson(id) { return TASK_DATA.people.find(x => x.id === id) || null; }
 function tlPersonName(id) {
   if (!id || id === 'unassigned') return 'Unassigned';
-  const p = TASK_DATA.people.find(x => x.id === id);
+  const p = tlPerson(id);
   return p ? p.name : 'Unassigned';
 }
 function tlTaskOverdue(t) { return t.due && !t.done && t.due < tlTodayISO(); }
+// Live (non-deleted) records — every renderer reads through these.
+function tlPeople() { return TASK_DATA.people.filter(p => !p.deleted); }
+function tlTasks()  { return TASK_DATA.tasks.filter(t => !t.deleted); }
+function tlJobs()   { return TASK_DATA.jobLog.filter(j => !j.deleted); }
 function tlPeopleOptions(sel) {
   return `<option value="unassigned" ${!sel || sel === 'unassigned' ? 'selected' : ''}>Unassigned</option>` +
-    TASK_DATA.people.map(p => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${escHtml(p.name)}</option>`).join('');
+    tlPeople().map(p => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${escHtml(p.name)}</option>`).join('');
 }
+// Does this task pass the active department filter?
+function tlPassesFilter(t) {
+  if (tlFilter === 'all') return true;
+  const p = tlPerson(t.person);
+  if (tlFilter === 'priority') return !!(p && p.priorityPerson);
+  return !!(p && !p.priorityPerson && (p.department || 'Contractors') === tlFilter);
+}
+
+// ── Normalize + migrate ──
+// Every record carries an `updated` stamp and may carry `deleted:true` as a
+// tombstone. Both are what make a safe two-device merge possible.
 function tlNormalize(d) {
   d = d || {};
+  const arr = k => Array.isArray(d[k]) ? d[k] : [];
+  const stamp = (x, i) => {
+    if (!x || typeof x !== 'object') return null;
+    if (!x.id) x.id = tlUid();
+    if (!x.updated) x.updated = x.created || (1 + i);
+    return x;
+  };
+  const out = {
+    people: arr('people').map(stamp).filter(Boolean),
+    tasks:  arr('tasks').map(stamp).filter(Boolean),
+    jobLog: arr('jobLog').map(stamp).filter(Boolean),
+    updatedAt: Number(d.updatedAt) || 0,
+  };
+  // Legacy migration: fill in fields added after the first release.
+  out.people.forEach(p => {
+    if (!p.department) p.department = 'Contractors';
+    if (p.priorityPerson === undefined) p.priorityPerson = tlIsPriorityName(p.name);
+  });
+  out.tasks.forEach(t => {
+    if (!t.priority) t.priority = 'medium';
+    if (!t.person) t.person = 'unassigned';
+    if (t.done === undefined) t.done = false;
+  });
+  return out;
+}
+
+// ── Merge (last-write-wins per record, never per document) ──
+// A whole-document overwrite is what loses data when two devices are in play.
+// Merging per record means a stale device can only ever lose its own edit,
+// never someone else's.
+function tlMergeLists(mine, theirs) {
+  const by = new Map();
+  (mine || []).forEach(x => by.set(x.id, x));
+  (theirs || []).forEach(x => {
+    const cur = by.get(x.id);
+    if (!cur || (x.updated || 0) > (cur.updated || 0)) by.set(x.id, x);
+  });
+  return Array.from(by.values());
+}
+function tlMerge(mine, theirs) {
   return {
-    people: Array.isArray(d.people) ? d.people : [],
-    tasks:  Array.isArray(d.tasks)  ? d.tasks  : [],
-    jobLog: Array.isArray(d.jobLog) ? d.jobLog : [],
+    people: tlMergeLists(mine.people, theirs.people),
+    tasks:  tlMergeLists(mine.tasks,  theirs.tasks),
+    jobLog: tlMergeLists(mine.jobLog, theirs.jobLog),
+    updatedAt: Math.max(mine.updatedAt || 0, theirs.updatedAt || 0),
   };
 }
+// Cheap structural fingerprint, used to skip no-op writes and no-op re-renders.
+function tlFingerprint(d) {
+  const f = l => (l || []).map(x => x.id + ':' + (x.updated || 0)).sort().join(',');
+  return f(d.people) + '|' + f(d.tasks) + '|' + f(d.jobLog);
+}
+// Drop tombstones once every device has certainly seen them.
+function tlPurgeTombstones(d) {
+  const cutoff = Date.now() - 60 * 24 * 3600 * 1000;
+  ['people', 'tasks', 'jobLog'].forEach(k => {
+    d[k] = d[k].filter(x => !(x.deleted && (x.updated || 0) < cutoff));
+  });
+  return d;
+}
+// Firestore rejects `undefined`; scrub before every write.
+function tlSanitize(d) { return JSON.parse(JSON.stringify(d)); }
 
 // ── open / close / views ──
 function openTaskList() {
+  if (!tlLoaded) tlLoadLocal();  // never render (or save) from empty state
   document.getElementById('taskList').classList.add('open');
-  loadTaskList().then(() => setTlView('today'));
+  setTlView('today');            // render what we already hold — never blocks on the network
+  tlWatch();                     // live listener keeps it fresh from here on
 }
-function closeTaskList() { document.getElementById('taskList').classList.remove('open'); }
+function closeTaskList() {
+  tlFlush();                    // make sure nothing in-flight is dropped
+  document.getElementById('taskList').classList.remove('open');
+}
 function setTlView(v) {
   tlView = v;
   document.querySelectorAll('#tlTabs .tl-tab').forEach(t => t.classList.toggle('active', t.dataset.view === v));
   renderTaskList();
 }
+function setTlFilter(v) { tlFilter = v; renderTaskList(); }
 function renderTaskList() {
   const body = document.getElementById('tlBody'); if (!body) return;
   body.innerHTML = tlView === 'today' ? renderTlToday()
                  : tlView === 'people' ? renderTlPeople()
                  :                       renderTlJobLog();
 }
+function tlRerenderIfOpen() {
+  const panel = document.getElementById('taskList');
+  if (panel && panel.classList.contains('open')) renderTaskList();
+}
 
-// ── save / load ──
+// ── local backups ──
+// Every save snapshots the previous state. If anything ever goes wrong, the
+// last 15 versions are recoverable from this device without the network.
+function tlPushBackup(prevJson) {
+  if (!prevJson) return;
+  try {
+    const list = JSON.parse(localStorage.getItem(TL_BAK) || '[]');
+    if (list.length && list[list.length - 1].d === prevJson) return;   // unchanged
+    list.push({ t: Date.now(), d: prevJson });
+    while (list.length > 15) list.shift();
+    localStorage.setItem(TL_BAK, JSON.stringify(list));
+  } catch (e) { /* backups are best-effort; never block a save */ }
+}
+
+// ── save ──
 function tlStatus(msg) { const el = document.getElementById('tlSaveStatus'); if (el) el.textContent = msg; }
+function tlCount(d) { return (d.people || []).length + (d.tasks || []).length + (d.jobLog || []).length; }
+function tlWriteLocal() {
+  try {
+    const prev = localStorage.getItem(TL_KEY);
+    // Safety net: never replace a populated cache with an empty one. That only
+    // happens when state was never loaded, and it is precisely how a list gets
+    // wiped. Recover the cache instead of destroying it.
+    if (prev && tlCount(TASK_DATA) === 0) {
+      let prevCount = 0;
+      try { prevCount = tlCount(JSON.parse(prev)); } catch (e) {}
+      if (prevCount > 0) {
+        console.warn('Refused to overwrite ' + prevCount + ' saved records with an empty list — reloading cache.');
+        tlLoadLocal();
+        tlRerenderIfOpen();
+        return false;
+      }
+    }
+    const next = JSON.stringify(TASK_DATA);
+    if (prev !== next) tlPushBackup(prev);
+    localStorage.setItem(TL_KEY, next);
+    return true;
+  } catch (e) {
+    console.error('Local save failed:', e);
+    tlStatus('⚠ This device is out of storage — export a backup now');
+    showToast('⚠️', 'Local storage full — use Export');
+    return false;
+  }
+}
 function saveTaskList(manual) {
-  localStorage.setItem('gota_tasklist', JSON.stringify(TASK_DATA));
-  tlStatus('Saving…');
+  TASK_DATA.updatedAt = Date.now();
+  tlPurgeTombstones(TASK_DATA);
+  const okLocal = tlWriteLocal();                 // local first: always survives
   if (!firestoreReady) {
-    tlStatus('Saved on this device · ' + tlNowTime());
-    if (manual) showToast('💾', 'Saved on this device');
+    tlStatus(okLocal ? 'Saved on this device · ' + tlNowTime() : 'Not saved');
+    if (manual && okLocal) showToast('💾', 'Saved on this device');
     return;
   }
-  db.collection('properties').doc('taskList').set(TASK_DATA)
-    .then(() => { tlStatus('Saved at ' + tlNowTime()); if (manual) showToast('💾', 'Task list saved'); })
-    .catch(e => { console.error('Task list save error:', e); tlStatus('Save failed — kept on this device'); });
+  tlStatus('Saving…');
+  // merge:true so a field we don't know about is never clobbered.
+  db.collection('properties').doc('taskList').set(tlSanitize(TASK_DATA), { merge: true })
+    .then(() => { tlStatus('Saved & synced · ' + tlNowTime()); if (manual) showToast('💾', 'Task list saved'); })
+    .catch(e => {
+      console.error('Task list save error:', e);
+      // Offline persistence will retry; the local copy is already safe.
+      tlStatus('Saved on this device — will sync when back online');
+      if (manual) showToast('📴', 'Saved locally — will sync later');
+    });
+}
+// Force a write on the way out (tab close, background, panel close).
+function tlFlush() { if (TASK_DATA.people.length || TASK_DATA.tasks.length || TASK_DATA.jobLog.length) tlWriteLocal(); }
+
+// ── load + live sync ──
+// Reads never replace local state; they merge into it. That is the single
+// change that makes losing work impossible: a remote copy missing your edits
+// can no longer delete them.
+function tlAdopt(remote, tag) {
+  const before = tlFingerprint(TASK_DATA);
+  const merged = tlMerge(TASK_DATA, tlNormalize(remote));
+  TASK_DATA = merged;
+  const after = tlFingerprint(TASK_DATA);
+  if (before !== after) {
+    tlWriteLocal();
+    tlRerenderIfOpen();
+    if (tag) tlStatus('Synced from ' + tag + ' · ' + tlNowTime());
+  }
+  return before !== after;
+}
+// Synchronous local restore — the one path that must never depend on the
+// network, on auth, or on init() having run.
+function tlLoadLocal() {
+  try {
+    const raw = localStorage.getItem(TL_KEY);
+    if (raw) TASK_DATA = tlMerge(TASK_DATA, tlNormalize(JSON.parse(raw)));
+  } catch (e) { console.warn('Local task cache unreadable:', e); }
+  tlLoaded = true;
 }
 async function loadTaskList() {
-  const local = localStorage.getItem('gota_tasklist');
-  if (local) { try { TASK_DATA = tlNormalize(JSON.parse(local)); } catch(e) {} }
+  tlLoadLocal();
+  tlRerenderIfOpen();
   if (!firestoreReady) return;
   try {
     const doc = await db.collection('properties').doc('taskList').get();
     if (doc.exists) {
-      TASK_DATA = tlNormalize(doc.data());
-      localStorage.setItem('gota_tasklist', JSON.stringify(TASK_DATA));
-      const panel = document.getElementById('taskList');
-      if (panel && panel.classList.contains('open')) renderTaskList();
+      const changed = tlAdopt(doc.data(), 'cloud');
+      // If our local copy held records the cloud lacks, push them straight back.
+      if (tlFingerprint(TASK_DATA) !== tlFingerprint(tlNormalize(doc.data()))) saveTaskList();
+      else if (changed) tlStatus('Up to date · ' + tlNowTime());
+    } else if (TASK_DATA.tasks.length || TASK_DATA.people.length) {
+      saveTaskList();            // first ever sync of this device's data
     }
-  } catch(e) { console.warn('Task list load failed, using local cache:', e); }
+  } catch (e) { console.warn('Task list load failed, using local cache:', e); }
+  tlWatch();
+}
+// Live listener: other devices' edits appear without a refresh.
+function tlWatch() {
+  if (!firestoreReady || tlUnsub) return;
+  try {
+    tlUnsub = db.collection('properties').doc('taskList')
+      .onSnapshot({ includeMetadataChanges: false }, snap => {
+        if (!snap.exists) return;
+        if (snap.metadata.hasPendingWrites) return;   // our own echo
+        tlAdopt(snap.data(), 'another device');
+      }, e => console.warn('Task list listener error:', e));
+  } catch (e) { console.warn('Could not start task list listener:', e); }
 }
 
+// ── export / import / restore ──
+function tlExport() {
+  const blob = new Blob([JSON.stringify(TASK_DATA, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'gota-tasklist-' + tlTodayISO() + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  showToast('⬇️', 'Backup file downloaded');
+}
+function tlImport(input) {
+  const file = input.files && input.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const incoming = tlNormalize(JSON.parse(r.result));
+      const n = incoming.tasks.length + incoming.people.length + incoming.jobLog.length;
+      if (!confirm(`Merge ${n} record${n === 1 ? '' : 's'} from this file into your task list?\n\nNothing is deleted — records are merged by ID, newest wins.`)) return;
+      TASK_DATA = tlMerge(TASK_DATA, incoming);
+      saveTaskList(true); renderTaskList();
+      showToast('⬆️', 'Backup merged');
+    } catch (e) { showToast('❌', 'That file is not a valid backup'); }
+  };
+  r.readAsText(file);
+  input.value = '';
+}
+function tlRestore() {
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem(TL_BAK) || '[]'); } catch (e) {}
+  if (!list.length) { showToast('ℹ️', 'No local backups yet'); return; }
+  const lines = list.map((b, i) => {
+    let c = 0; try { const d = JSON.parse(b.d); c = (d.tasks || []).length; } catch (e) {}
+    return `${i + 1}. ${new Date(b.t).toLocaleString()} — ${c} task${c === 1 ? '' : 's'}`;
+  }).join('\n');
+  const pick = prompt(`Local backups (newest last):\n\n${lines}\n\nEnter a number to merge it back in:`);
+  const idx = parseInt(pick, 10) - 1;
+  if (isNaN(idx) || !list[idx]) return;
+  try {
+    TASK_DATA = tlMerge(TASK_DATA, tlNormalize(JSON.parse(list[idx].d)));
+    saveTaskList(true); renderTaskList();
+    showToast('↩️', 'Backup restored');
+  } catch (e) { showToast('❌', 'That backup could not be read'); }
+}
+
+// Never lose the last keystroke on the way out.
+window.addEventListener('beforeunload', tlFlush);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') tlFlush(); });
+
 // ── render: Today ──
+function tlPriRank(t) { return t.priority === 'high' ? 0 : t.priority === 'low' ? 2 : 1; }
+function tlSortOpen(a, b) {
+  const p = tlPriRank(a) - tlPriRank(b); if (p) return p;          // high first
+  if (a.due && b.due) return a.due < b.due ? -1 : a.due > b.due ? 1 : 0;
+  if (a.due) return -1;
+  if (b.due) return 1;
+  return (a.created || 0) - (b.created || 0);
+}
+// Department / priority filter chips.
+function tlFilterBar() {
+  const chip = (v, label, color) =>
+    `<button class="tl-chip ${tlFilter === v ? 'on' : ''}" onclick="setTlFilter('${v}')"
+       style="${color ? `--c:${color}` : ''}">${color ? `<i style="background:${color}"></i>` : ''}${label}</button>`;
+  return `<div class="tl-chips">
+    ${chip('all', 'All')}
+    ${chip('priority', 'Tim &amp; Alex', TL_PRIORITY_COLOR)}
+    ${TL_DEPTS.map(d => chip(d.v, d.v, d.color)).join('')}
+  </div>`;
+}
 function renderTlToday() {
-  const t = TASK_DATA.tasks;
-  const overdue = t.filter(tlTaskOverdue).sort((a, b) => a.due < b.due ? -1 : 1);
-  const today   = t.filter(x => x.due === tlTodayISO()).sort((a, b) => (a.done - b.done));
-  const noDue   = t.filter(x => !x.due).sort((a, b) => (a.done - b.done));
+  const today = tlTodayISO();
+  const all = tlTasks();
+  const t = all.filter(tlPassesFilter);
+  const open    = t.filter(x => !x.done);
+  const overdue = open.filter(x => x.due && x.due < today).sort(tlSortOpen);
+  const dueToday= open.filter(x => x.due === today).sort(tlSortOpen);
+  const upcoming= open.filter(x => x.due && x.due > today).sort(tlSortOpen);
+  const noDue   = open.filter(x => !x.due).sort(tlSortOpen);
+  const done    = t.filter(x => x.done).sort((a, b) => (b.updated || 0) - (a.updated || 0));
+  const hidden  = all.length - t.length;
+
   let h = `<div class="tl-addrow">
     <input id="tlNewTask" placeholder="New task…" style="flex:2;min-width:150px" onkeydown="if(event.key==='Enter')tlAddTask()">
     <select id="tlNewPerson" style="flex:1;min-width:120px">${tlPeopleOptions('unassigned')}</select>
     <select id="tlNewPriority" style="flex:0.8;min-width:110px">
-      <option value="low">Low</option>
-      <option value="medium" selected>Medium</option>
-      <option value="high">High</option>
+      <option value="low">🟢 Low</option>
+      <option value="medium" selected>🟡 Medium</option>
+      <option value="high">🔴 High</option>
     </select>
     <input type="date" id="tlNewDue" style="flex:1;min-width:130px">
     <button class="btn btn-tan" style="font-size:12px" onclick="tlAddTask()">+ Add</button>
   </div>`;
+  h += tlFilterBar();
+  h += `<div style="font-size:11px;color:#7A8C6A;margin-bottom:10px">
+    ${open.length} open · ${done.length} completed${hidden > 0 ? ` · ${hidden} hidden by filter` : ''}
+  </div>`;
   h += tlGroup('⛔ Overdue', overdue, 'Nothing overdue.');
-  h += tlGroup('📅 Due Today', today, 'Nothing due today.');
+  h += tlGroup('📅 Due Today', dueToday, 'Nothing due today.');
+  h += tlGroup('🗓 Upcoming', upcoming, 'Nothing scheduled ahead.');
   h += tlGroup('📌 No Due Date', noDue, 'No undated tasks.');
+  h += tlGroup('✅ Completed', done, 'Nothing completed yet.');
   return h;
 }
 function tlGroup(title, list, empty) {
@@ -3098,10 +3408,12 @@ function tlTaskRow(t) {
   const due = t.due ? `<span class="tl-task-meta ${od ? 'tl-overdue' : ''}">${od ? '⚠ ' : ''}${fmtDate(t.due)}</span>` : '';
   const pri = t.priority || 'medium';
   const priEmoji = pri === 'high' ? '🔴' : pri === 'low' ? '🟢' : '🟡';
-  return `<div class="tl-task ${t.done ? 'done' : ''}">
+  const p = tlPerson(t.person);
+  const color = tlPersonColor(p);
+  return `<div class="tl-task ${t.done ? 'done' : ''}" style="border-left:3px solid ${color}">
     <input type="checkbox" class="tl-chk" ${t.done ? 'checked' : ''} onchange="tlToggleTask('${t.id}')">
     <span class="tl-task-text">${escHtml(t.text)}</span>
-    <span class="tl-task-meta">👤 ${escHtml(tlPersonName(t.person))}</span>
+    <span class="tl-task-meta" style="color:${color}">${p && p.priorityPerson ? '⭐ ' : ''}${escHtml(tlPersonName(t.person))}</span>
     <span class="tl-task-meta">${priEmoji} ${pri.charAt(0).toUpperCase() + pri.slice(1)}</span>
     ${due}
     <button class="tl-del" title="Delete task" onclick="tlDeleteTask('${t.id}')">✕</button>
@@ -3110,41 +3422,57 @@ function tlTaskRow(t) {
 
 // ── render: People ──
 function renderTlPeople() {
+  const people = tlPeople();
   let h = `<div class="tl-addrow">
     <input id="tlNewPersonName" placeholder="Add a person (name)…" style="flex:1;min-width:160px" onkeydown="if(event.key==='Enter')tlAddPerson()">
-    <select id="tlNewPersonDept" style="flex:0.9;min-width:140px">
-      <option value="Contractors">Contractors</option>
-      <option value="Management">Management</option>
-      <option value="Facilities">Facilities</option>
-      <option value="Owners">Owners</option>
-    </select>
+    <select id="tlNewPersonDept" style="flex:0.9;min-width:150px">${tlDeptOptions('Contractors')}</select>
     <button class="btn btn-tan" style="font-size:12px" onclick="tlAddPerson()">+ Add Person</button>
   </div>`;
-  h += `<div class="tl-sec-title">People (${TASK_DATA.people.length})</div>`;
-  if (!TASK_DATA.people.length) h += `<div style="font-size:12px;color:#5A6A85;margin-bottom:8px">No people yet — add one above.</div>`;
-  TASK_DATA.people.forEach(p => {
-    const n = TASK_DATA.tasks.filter(t => t.person === p.id).length;
-    const dept = p.department || 'Contractors';
-    h += `<div class="tl-person">
-      <div style="flex:1">
-        <div style="font-weight:700;color:#DDD5B8">${escHtml(p.name)}</div>
-        <div style="font-size:11px;color:#7A8C6A">${dept} · ${n} task${n !== 1 ? 's' : ''}</div>
+  h += tlFilterBar();
+
+  // Priority people (Tim & Alex) sort to the top and show red.
+  const shown = people.filter(p => tlFilter === 'all'
+    || (tlFilter === 'priority' ? p.priorityPerson
+        : !p.priorityPerson && (p.department || 'Contractors') === tlFilter));
+  const sorted = [...shown].sort((a, b) =>
+    (b.priorityPerson ? 1 : 0) - (a.priorityPerson ? 1 : 0) || a.name.localeCompare(b.name));
+
+  h += `<div class="tl-sec-title">People (${sorted.length}${sorted.length !== people.length ? ' of ' + people.length : ''})</div>`;
+  if (!sorted.length) h += `<div style="font-size:12px;color:#5A6A85;margin-bottom:8px">${people.length ? 'Nobody matches this filter.' : 'No people yet — add one above.'}</div>`;
+  sorted.forEach(p => {
+    const openN = tlTasks().filter(t => t.person === p.id && !t.done).length;
+    const color = tlPersonColor(p);
+    h += `<div class="tl-person" style="border-left:3px solid ${color}">
+      <span class="tl-dot" style="background:${color}"></span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;color:#DDD5B8">${p.priorityPerson ? '⭐ ' : ''}${escHtml(p.name)}</div>
+        <div style="font-size:11px;color:#7A8C6A">${openN} open task${openN !== 1 ? 's' : ''}</div>
       </div>
+      <select onchange="tlSetDept('${p.id}',this.value)" title="Department"
+        style="width:auto;font-size:11px;padding:4px 6px;border-color:${color}">${tlDeptOptions(p.department || 'Contractors')}</select>
+      <button class="tl-star ${p.priorityPerson ? 'on' : ''}" onclick="tlTogglePriorityPerson('${p.id}')"
+        title="${p.priorityPerson ? 'Remove red priority' : 'Mark as red priority'}">${p.priorityPerson ? '⭐' : '☆'}</button>
       <button class="tl-del" onclick="tlDeletePerson('${p.id}')" title="Delete person">🗑</button>
     </div>`;
   });
-  const buckets = TASK_DATA.people.map(p => ({ id: p.id, name: p.name })).concat([{ id: 'unassigned', name: 'Unassigned' }]);
+
+  const buckets = sorted.map(p => ({ id: p.id, name: p.name, color: tlPersonColor(p) }));
+  if (tlFilter === 'all') buckets.push({ id: 'unassigned', name: 'Unassigned', color: '#7A8C6A' });
   buckets.forEach(b => {
-    const list = TASK_DATA.tasks.filter(t => (t.person || 'unassigned') === b.id).sort((a, c) => (a.done - c.done));
+    const list = tlTasks().filter(t => (t.person || 'unassigned') === b.id);
+    const open = list.filter(t => !t.done).sort(tlSortOpen);
+    const done = list.filter(t => t.done).sort((a, c) => (c.updated || 0) - (a.updated || 0));
     if (b.id === 'unassigned' && !list.length) return;
-    h += `<div class="tl-sec-title">${escHtml(b.name)} (${list.length})</div>`;
-    h += list.length ? list.map(tlTaskRow).join('') : `<div style="font-size:12px;color:#5A6A85;margin-bottom:6px">No tasks.</div>`;
+    h += `<div class="tl-sec-title" style="color:${b.color}">${escHtml(b.name)} (${open.length} open · ${done.length} done)</div>`;
+    h += open.length || done.length
+      ? open.concat(done).map(tlTaskRow).join('')
+      : `<div style="font-size:12px;color:#5A6A85;margin-bottom:6px">No tasks.</div>`;
     h += `<div class="tl-addrow" style="margin-top:4px">
       <input id="tlpn_${b.id}" placeholder="Add task for ${escAttr(b.name)}…" style="flex:2;min-width:140px" onkeydown="if(event.key==='Enter')tlAddTaskFor('${b.id}')">
-      <select id="tlpp_${b.id}" style="flex:0.8;min-width:100px">
-        <option value="low">Low</option>
-        <option value="medium" selected>Medium</option>
-        <option value="high">High</option>
+      <select id="tlpp_${b.id}" style="flex:0.8;min-width:110px">
+        <option value="low">🟢 Low</option>
+        <option value="medium" selected>🟡 Medium</option>
+        <option value="high">🔴 High</option>
       </select>
       <input type="date" id="tlpd_${b.id}" style="flex:1;min-width:130px">
       <button class="btn btn-gray" style="font-size:11px" onclick="tlAddTaskFor('${b.id}')">+ Add</button>
@@ -3166,7 +3494,7 @@ function renderTlJobLog() {
     <input id="tlJobPhoto" placeholder="Photo URL — paste a link from Google Photos/Drive" style="width:100%;margin-top:8px;${inp}">
     <button class="btn btn-tan" style="width:100%;font-size:13px;margin-top:8px" onclick="tlAddJob()">+ Add Log Entry</button>
   </div>`;
-  const log = [...TASK_DATA.jobLog].sort((a, b) => {
+  const log = [...tlJobs()].sort((a, b) => {
     const da = a.date || '', db = b.date || '';
     if (da !== db) return da < db ? 1 : -1;
     return (b.created || 0) - (a.created || 0);
@@ -3202,9 +3530,10 @@ function tlAddTask() {
   const person = (document.getElementById('tlNewPerson') || {}).value || 'unassigned';
   const priority = (document.getElementById('tlNewPriority') || {}).value || 'medium';
   const due = (document.getElementById('tlNewDue') || {}).value || '';
-  TASK_DATA.tasks.push({ id: tlUid(), text, person, priority, due, done: false, created: Date.now() });
-  document.getElementById('tlNewTask').value = '';
-  document.getElementById('tlNewDue').value = '';
+  const now = Date.now();
+  TASK_DATA.tasks.push({ id: tlUid(), text, person, priority, due, done: false, created: now, updated: now });
+  el.value = '';
+  const d = document.getElementById('tlNewDue'); if (d) d.value = '';
   saveTaskList(false);
   renderTaskList();
   showToast('✅', 'Task added & saved');
@@ -3214,35 +3543,59 @@ function tlAddTaskFor(personId) {
   const text = (el.value || '').trim(); if (!text) return;
   const priority = (document.getElementById('tlpp_' + personId) || {}).value || 'medium';
   const due = (document.getElementById('tlpd_' + personId) || {}).value || '';
-  TASK_DATA.tasks.push({ id: tlUid(), text, person: personId, priority, due, done: false, created: Date.now() });
-  document.getElementById('tlpn_' + personId).value = '';
-  document.getElementById('tlpd_' + personId).value = '';
+  const now = Date.now();
+  TASK_DATA.tasks.push({ id: tlUid(), text, person: personId, priority, due, done: false, created: now, updated: now });
+  el.value = '';
+  const d = document.getElementById('tlpd_' + personId); if (d) d.value = '';
   saveTaskList(false);
   renderTaskList();
   showToast('✅', 'Task added & saved');
 }
-function tlToggleTask(id) { const t = TASK_DATA.tasks.find(x => x.id === id); if (!t) return; t.done = !t.done; saveTaskList(false); renderTaskList(); }
-function tlDeleteTask(id) { TASK_DATA.tasks = TASK_DATA.tasks.filter(x => x.id !== id); saveTaskList(false); renderTaskList(); showToast('🗑', 'Task deleted'); }
+function tlToggleTask(id) {
+  const t = TASK_DATA.tasks.find(x => x.id === id); if (!t) return;
+  t.done = !t.done; t.updated = Date.now();
+  saveTaskList(false); renderTaskList();
+}
+// Deletes are tombstones, not splices: a hard delete would be undone by the
+// next sync from a device that still has the record.
+function tlDeleteTask(id) {
+  const t = TASK_DATA.tasks.find(x => x.id === id); if (!t) return;
+  t.deleted = true; t.updated = Date.now();
+  saveTaskList(false); renderTaskList(); showToast('🗑', 'Task deleted');
+}
 function tlAddPerson() {
   const el = document.getElementById('tlNewPersonName'); const name = (el.value || '').trim(); if (!name) return;
   const department = (document.getElementById('tlNewPersonDept') || {}).value || 'Contractors';
-  TASK_DATA.people.push({ id: tlUid('p'), name, department });
-  document.getElementById('tlNewPersonName').value = '';
+  const now = Date.now();
+  TASK_DATA.people.push({ id: tlUid('p'), name, department, priorityPerson: tlIsPriorityName(name), created: now, updated: now });
+  el.value = '';
   saveTaskList(false);
   renderTaskList();
   showToast('👤', 'Person added & saved');
 }
+function tlSetDept(id, dept) {
+  const p = tlPerson(id); if (!p) return;
+  p.department = dept; p.updated = Date.now();
+  saveTaskList(false); renderTaskList();
+}
+function tlTogglePriorityPerson(id) {
+  const p = tlPerson(id); if (!p) return;
+  p.priorityPerson = !p.priorityPerson; p.updated = Date.now();
+  saveTaskList(false); renderTaskList();
+  showToast(p.priorityPerson ? '⭐' : '☆', p.priorityPerson ? p.name + ' marked red priority' : p.name + ' back to department color');
+}
 function tlDeletePerson(id) {
-  const p = TASK_DATA.people.find(x => x.id === id); if (!p) return;
-  const n = TASK_DATA.tasks.filter(t => t.person === id).length;
-  if (n > 0) {
-    const del = confirm(`"${p.name}" has ${n} task${n > 1 ? 's' : ''}.\n\nOK  = delete ${p.name} AND their tasks\nCancel = keep the tasks, reassign them to Unassigned`);
-    if (del) TASK_DATA.tasks = TASK_DATA.tasks.filter(t => t.person !== id);
-    else TASK_DATA.tasks.forEach(t => { if (t.person === id) t.person = 'unassigned'; });
+  const p = tlPerson(id); if (!p) return;
+  const now = Date.now();
+  const mine = tlTasks().filter(t => t.person === id);
+  if (mine.length) {
+    const del = confirm(`"${p.name}" has ${mine.length} task${mine.length > 1 ? 's' : ''}.\n\nOK  = delete ${p.name} AND their tasks\nCancel = keep the tasks, reassign them to Unassigned`);
+    if (del) mine.forEach(t => { t.deleted = true; t.updated = now; });
+    else mine.forEach(t => { t.person = 'unassigned'; t.updated = now; });
   } else {
     if (!confirm(`Delete "${p.name}"?`)) return;
   }
-  TASK_DATA.people = TASK_DATA.people.filter(x => x.id !== id);
+  p.deleted = true; p.updated = now;
   saveTaskList(false);
   renderTaskList();
   showToast('🗑', 'Person deleted');
@@ -3253,7 +3606,8 @@ function tlAddJob() {
   const note = (document.getElementById('tlJobNote').value || '').trim();
   const photo = (document.getElementById('tlJobPhoto').value || '').trim();
   if (!job && !note && !photo) { showToast('⚠️', 'Enter a job name or note'); return; }
-  TASK_DATA.jobLog.push({ id: tlUid('j'), job, date, note, photo, created: Date.now() });
+  const now = Date.now();
+  TASK_DATA.jobLog.push({ id: tlUid('j'), job, date, note, photo, created: now, updated: now });
   document.getElementById('tlJob').value = '';
   document.getElementById('tlJobNote').value = '';
   document.getElementById('tlJobPhoto').value = '';
@@ -3261,7 +3615,12 @@ function tlAddJob() {
   renderTaskList();
   showToast('🏗', 'Log entry added & saved');
 }
-function tlDeleteJob(id) { if (!confirm('Delete this log entry?')) return; TASK_DATA.jobLog = TASK_DATA.jobLog.filter(x => x.id !== id); saveTaskList(false); renderTaskList(); showToast('🗑', 'Log deleted'); }
+function tlDeleteJob(id) {
+  if (!confirm('Delete this log entry?')) return;
+  const e = TASK_DATA.jobLog.find(x => x.id === id); if (!e) return;
+  e.deleted = true; e.updated = Date.now();
+  saveTaskList(false); renderTaskList(); showToast('🗑', 'Log deleted');
+}
 
 function renderPhotoGrid() {
   const grid = document.getElementById('photoGrid');
