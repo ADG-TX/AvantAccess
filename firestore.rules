@@ -13,11 +13,14 @@ service cloud.firestore {
     }
 
     // ── Maintenance plan intake (brochure sign-ups) ───────────────
-    // Public write so unauthenticated garage owners can submit the form.
-    // Read is restricted to authenticated users (the dashboard).
+    // Public CREATE only, so an unauthenticated garage owner can submit the
+    // form. Update and delete stay locked: with a blanket `write` a stranger
+    // who guessed the collection could overwrite or wipe the whole intake
+    // queue. Only the signed-in dashboard can modify or clear a request.
     match /intake_requests/{requestId} {
-      allow read:  if request.auth != null;
-      allow write: if true;
+      allow read:            if request.auth != null;
+      allow create:          if request.resource.data.size() < 30;
+      allow update, delete:  if request.auth != null;
     }
 
   }

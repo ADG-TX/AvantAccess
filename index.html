@@ -136,6 +136,12 @@
     .tl-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
     .tl-star{background:none;border:none;cursor:pointer;font-size:15px;color:#5A6A85;flex-shrink:0;line-height:1}
     .tl-star.on{color:#F5A5A0}
+    .tl-task-text{cursor:text}
+    .tl-unit{color:#90C8F0;cursor:pointer;font-weight:700}
+    .tl-unit:hover{text-decoration:underline}
+    .tl-editing{background:#12180C;align-items:center}
+    .tl-editing input,.tl-editing select{font-size:12px;padding:6px 8px}
+    .tl-hidden-note{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#241A38;border:1px solid #6A4C9C;color:#C9AEEA;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;font-weight:600}
     .tl-joblog-img{max-width:100%;max-height:260px;border-radius:8px;margin-top:8px;display:block;border:1px solid #1C2D16}
 
     /* ── Inputs ── */
@@ -2049,7 +2055,10 @@ function summaryTabHtml(u) {
   // HVAC
   const hvacBits = row('Model', escHtml(u.hvacModel||'')) + row('Serial', escHtml(u.hvacSerial||'')) +
     row('Capacity', u.hvacBTU ? escHtml(u.hvacBTU) + ' BTU' : '') + row('Refrigerant', escHtml(u.refrigerant||'')) +
-    row('Condenser', escHtml(u.condenser||'')) + row('Filter', escHtml(u.filterSize||'')) +
+    // condenser is an object ({model, serial, …}) on most units — show the
+    // model, not "[object Object]".
+    row('Condenser', escHtml((u.condenser && typeof u.condenser === 'object' ? u.condenser.model : u.condenser) || '')) +
+    row('Filter', escHtml(u.filterSize||'')) +
     row('Installed', fmtDate(u.installDate)) + row('Warranty', fmtDate(u.warrantyExpires));
   h += card(
     lbl('❄️ HVAC System') +
@@ -2096,6 +2105,30 @@ function summaryTabHtml(u) {
       `<button class="btn btn-gray" style="font-size:11px;width:100%" onclick="switchTab('history')">View full history</button>`
     );
   }
+
+  // Tasks pinned to this garage
+  const uTasks = (typeof tlUnitTasks === 'function') ? tlUnitTasks(u.id, false) : [];
+  const uOpen = uTasks.filter(t => !t.done);
+  h += card(
+    lbl(`✅ Tasks${uOpen.length ? ` (${uOpen.length} open)` : ''}`) +
+    (uTasks.length
+      ? uTasks.slice(0, 5).map(t => {
+          const pr = t.priority || 'medium';
+          const dot = pr === 'high' ? '🔴' : pr === 'low' ? '🟢' : '🟡';
+          const od = tlTaskOverdue(t);
+          return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #16210F">
+            <input type="checkbox" ${t.done ? 'checked' : ''} onchange="tlToggleTaskFromUnit('${t.id}')" style="width:16px;height:16px;accent-color:#3A7A22;cursor:pointer;flex-shrink:0">
+            <span style="flex:1;min-width:0;font-size:12px;color:${t.done ? '#5A6A85' : '#DDD5B8'};${t.done ? 'text-decoration:line-through' : ''};word-break:break-word">${escHtml(t.text)}</span>
+            <span style="font-size:10px;white-space:nowrap;color:${od ? '#F08080' : '#7A8C6A'}">${dot}${t.due ? ' ' + fmtDate(t.due) : ''}</span>
+          </div>`;
+        }).join('') + (uTasks.length > 5 ? `<div style="font-size:11px;color:#7A8C6A;margin-top:6px">+${uTasks.length - 5} more</div>` : '')
+      : `<div style="font-size:12px;color:#4D5C3D">No tasks pinned to this garage yet.</div>`) +
+    `<div style="display:flex;gap:6px;margin-top:8px">
+      <input id="sumTaskNew" placeholder="Add a task for #${escAttr(u.id)}…" style="flex:1;font-size:12px" onkeydown="if(event.key==='Enter')addTaskFromUnit('${escAttr(u.id)}')">
+      <button class="btn btn-tan" style="font-size:11px" onclick="addTaskFromUnit('${escAttr(u.id)}')">+ Add</button>
+    </div>
+    <button class="btn btn-gray" style="font-size:11px;margin-top:6px;width:100%" onclick="openTaskListForUnit('${escAttr(u.id)}')">📋 Open full task list</button>`
+  );
 
   // Quick-jump chips
   const chip = (label, n, tab) => `<button class="btn btn-gray" style="font-size:11px;flex:1;min-width:72px" onclick="switchTab('${tab}')">${label}${n ? ` (${n})` : ''}</button>`;
@@ -3022,6 +3055,9 @@ let tlView = 'today';
 let tlFilter = 'all';          // department filter on the Today / People views
 let tlUnsub = null;            // live Firestore listener
 let tlLoaded = false;          // has the local cache been read into memory yet?
+let tlEditingId = null;        // task currently open in the inline editor
+let tlSearch = '';             // free-text search across task text and unit
+let TL_JOB_PENDING = [];       // photos picked but not yet attached to a log entry
 const TL_KEY = 'gota_tasklist';
 const TL_BAK = 'gota_tasklist_backups';
 
@@ -3074,8 +3110,61 @@ function tlPeopleOptions(sel) {
 function tlPassesFilter(t) {
   if (tlFilter === 'all') return true;
   const p = tlPerson(t.person);
+  if (tlFilter === 'mine') { const me = tlMe(); return !!(me && t.person === me.id); }
   if (tlFilter === 'priority') return !!(p && p.priorityPerson);
   return !!(p && !p.priorityPerson && (p.department || 'Contractors') === tlFilter);
+}
+
+// ── Who am I? ──
+// A person record claimed with the signed-in email is "me", which powers the
+// My List filter. Claiming is explicit so nobody is guessed wrong.
+function tlMyEmail() { return (currentUser && currentUser.email || '').toLowerCase(); }
+function tlMe() {
+  const e = tlMyEmail(); if (!e) return null;
+  return tlPeople().find(p => (p.email || '').toLowerCase() === e) || null;
+}
+function tlClaimMe(id) {
+  const e = tlMyEmail();
+  if (!e) { showToast('⚠️', 'Sign in first so we know who you are'); return; }
+  const now = Date.now();
+  tlPeople().forEach(p => { if ((p.email || '').toLowerCase() === e && p.id !== id) { p.email = ''; p.updated = now; } });
+  const p = tlPerson(id); if (!p) return;
+  p.email = e; p.updated = now;
+  saveTaskList(false); renderTaskList();
+  showToast('🙋', p.name + ' is now your list');
+}
+function tlUnclaimMe(id) {
+  const p = tlPerson(id); if (!p) return;
+  p.email = ''; p.updated = Date.now();
+  saveTaskList(false); renderTaskList();
+}
+
+// ── Unit links ──
+// A task can be pinned to a garage; the unit's Summary tab then shows it.
+function tlUnitIds() {
+  return (typeof DATA === 'object' && DATA) ? Object.keys(DATA).sort() : [];
+}
+function tlUnitOptions(sel) {
+  return `<option value="">No unit</option>` +
+    tlUnitIds().map(id => `<option value="${id}" ${id === sel ? 'selected' : ''}>#${id}</option>`).join('');
+}
+function tlUnitTasks(unitId, openOnly) {
+  return tlTasks().filter(t => t.unit === String(unitId) && (!openOnly || !t.done)).sort(tlSortOpen);
+}
+
+// ── Search ──
+function tlPassesSearch(t) {
+  const q = tlSearch.trim().toLowerCase();
+  if (!q) return true;
+  return String(t.text || '').toLowerCase().includes(q)
+      || String(t.unit || '').toLowerCase().includes(q)
+      || tlPersonName(t.person).toLowerCase().includes(q);
+}
+function setTlSearch(v) {
+  tlSearch = v;
+  renderTaskList();
+  const el = document.getElementById('tlSearchBox');
+  if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
 }
 
 // ── Normalize + migrate ──
@@ -3105,7 +3194,10 @@ function tlNormalize(d) {
     if (!t.priority) t.priority = 'medium';
     if (!t.person) t.person = 'unassigned';
     if (t.done === undefined) t.done = false;
+    if (t.unit === undefined || t.unit === null) t.unit = '';
+    t.unit = String(t.unit);
   });
+  out.jobLog.forEach(j => { if (!Array.isArray(j.photos)) j.photos = []; });
   return out;
 }
 
@@ -3357,17 +3449,28 @@ function tlSortOpen(a, b) {
 function tlFilterBar() {
   const chip = (v, label, color) =>
     `<button class="tl-chip ${tlFilter === v ? 'on' : ''}" onclick="setTlFilter('${v}')"
-       style="${color ? `--c:${color}` : ''}">${color ? `<i style="background:${color}"></i>` : ''}${label}</button>`;
+       >${color ? `<i style="background:${color}"></i>` : ''}${label}</button>`;
+  const me = tlMe();
   return `<div class="tl-chips">
     ${chip('all', 'All')}
+    ${me ? chip('mine', '🙋 My List (' + escHtml(me.name) + ')', tlPersonColor(me)) : ''}
     ${chip('priority', 'Tim &amp; Alex', TL_PRIORITY_COLOR)}
     ${TL_DEPTS.map(d => chip(d.v, d.v, d.color)).join('')}
+  </div>`;
+}
+// Whenever a filter is hiding work, say so loudly with a one-tap way out.
+// Silently hidden tasks are what made the list look empty in the first place.
+function tlHiddenBanner(hidden) {
+  if (!hidden) return '';
+  return `<div class="tl-hidden-note">
+    <span>👁 ${hidden} task${hidden === 1 ? '' : 's'} hidden by this filter</span>
+    <button class="btn btn-gray" style="font-size:11px;padding:4px 10px" onclick="setTlFilter('all')">Show all</button>
   </div>`;
 }
 function renderTlToday() {
   const today = tlTodayISO();
   const all = tlTasks();
-  const t = all.filter(tlPassesFilter);
+  const t = all.filter(tlPassesFilter).filter(tlPassesSearch);
   const open    = t.filter(x => !x.done);
   const overdue = open.filter(x => x.due && x.due < today).sort(tlSortOpen);
   const dueToday= open.filter(x => x.due === today).sort(tlSortOpen);
@@ -3384,12 +3487,16 @@ function renderTlToday() {
       <option value="medium" selected>🟡 Medium</option>
       <option value="high">🔴 High</option>
     </select>
+    <select id="tlNewUnit" style="flex:0.8;min-width:110px" title="Pin this task to a garage">${tlUnitOptions('')}</select>
     <input type="date" id="tlNewDue" style="flex:1;min-width:130px">
     <button class="btn btn-tan" style="font-size:12px" onclick="tlAddTask()">+ Add</button>
   </div>`;
+  h += `<input id="tlSearchBox" placeholder="🔍 Search tasks, people, or a unit number…" value="${escAttr(tlSearch)}"
+    style="margin-bottom:10px" oninput="setTlSearch(this.value)">`;
   h += tlFilterBar();
+  h += tlHiddenBanner(hidden);
   h += `<div style="font-size:11px;color:#7A8C6A;margin-bottom:10px">
-    ${open.length} open · ${done.length} completed${hidden > 0 ? ` · ${hidden} hidden by filter` : ''}
+    ${open.length} open · ${done.length} completed
   </div>`;
   h += tlGroup('⛔ Overdue', overdue, 'Nothing overdue.');
   h += tlGroup('📅 Due Today', dueToday, 'Nothing due today.');
@@ -3404,20 +3511,93 @@ function tlGroup(title, list, empty) {
   return h + list.map(tlTaskRow).join('');
 }
 function tlTaskRow(t) {
+  if (tlEditingId === t.id) return tlTaskEditRow(t);
   const od = tlTaskOverdue(t);
   const due = t.due ? `<span class="tl-task-meta ${od ? 'tl-overdue' : ''}">${od ? '⚠ ' : ''}${fmtDate(t.due)}</span>` : '';
   const pri = t.priority || 'medium';
   const priEmoji = pri === 'high' ? '🔴' : pri === 'low' ? '🟢' : '🟡';
   const p = tlPerson(t.person);
   const color = tlPersonColor(p);
+  const unit = t.unit ? `<span class="tl-task-meta tl-unit" onclick="event.stopPropagation();openUnitFromTask('${escAttr(t.unit)}')" title="Open garage #${escAttr(t.unit)}">🏠 #${escHtml(t.unit)}</span>` : '';
   return `<div class="tl-task ${t.done ? 'done' : ''}" style="border-left:3px solid ${color}">
     <input type="checkbox" class="tl-chk" ${t.done ? 'checked' : ''} onchange="tlToggleTask('${t.id}')">
-    <span class="tl-task-text">${escHtml(t.text)}</span>
+    <span class="tl-task-text" onclick="tlEditTask('${t.id}')" title="Tap to edit">${escHtml(t.text)}</span>
+    ${unit}
     <span class="tl-task-meta" style="color:${color}">${p && p.priorityPerson ? '⭐ ' : ''}${escHtml(tlPersonName(t.person))}</span>
     <span class="tl-task-meta">${priEmoji} ${pri.charAt(0).toUpperCase() + pri.slice(1)}</span>
     ${due}
+    <button class="tl-del" style="color:#7A8C6A" title="Edit task" onclick="tlEditTask('${t.id}')">✏️</button>
     <button class="tl-del" title="Delete task" onclick="tlDeleteTask('${t.id}')">✕</button>
   </div>`;
+}
+// Inline editor — everything about a task is changeable after the fact.
+function tlTaskEditRow(t) {
+  return `<div class="tl-task tl-editing" style="border-left:3px solid #C4A26A;flex-wrap:wrap;gap:6px">
+    <input id="tlEditText" value="${escAttr(t.text)}" style="flex:1 1 100%;min-width:0"
+      onkeydown="if(event.key==='Enter')tlSaveEdit('${t.id}');if(event.key==='Escape')tlCancelEdit()">
+    <select id="tlEditPerson" style="flex:1;min-width:120px">${tlPeopleOptions(t.person)}</select>
+    <select id="tlEditPriority" style="flex:0.8;min-width:110px">
+      <option value="low" ${t.priority === 'low' ? 'selected' : ''}>🟢 Low</option>
+      <option value="medium" ${(t.priority || 'medium') === 'medium' ? 'selected' : ''}>🟡 Medium</option>
+      <option value="high" ${t.priority === 'high' ? 'selected' : ''}>🔴 High</option>
+    </select>
+    <select id="tlEditUnit" style="flex:0.8;min-width:110px">${tlUnitOptions(t.unit || '')}</select>
+    <input type="date" id="tlEditDue" value="${escAttr(t.due || '')}" style="flex:1;min-width:130px">
+    <button class="btn btn-tan" style="font-size:11px" onclick="tlSaveEdit('${t.id}')">Save</button>
+    <button class="btn btn-gray" style="font-size:11px" onclick="tlCancelEdit()">Cancel</button>
+  </div>`;
+}
+function tlEditTask(id) { tlEditingId = id; renderTaskList(); const el = document.getElementById('tlEditText'); if (el) { el.focus(); el.select(); } }
+function tlCancelEdit() { tlEditingId = null; renderTaskList(); }
+function tlSaveEdit(id) {
+  const t = TASK_DATA.tasks.find(x => x.id === id); if (!t) return;
+  const text = (document.getElementById('tlEditText') || {}).value;
+  if (text !== undefined && !String(text).trim()) { showToast('⚠️', 'Task needs a name'); return; }
+  if (text !== undefined) t.text = String(text).trim();
+  const g = id2 => (document.getElementById(id2) || {}).value;
+  if (g('tlEditPerson')   !== undefined) t.person   = g('tlEditPerson');
+  if (g('tlEditPriority') !== undefined) t.priority = g('tlEditPriority');
+  if (g('tlEditUnit')     !== undefined) t.unit     = g('tlEditUnit');
+  if (g('tlEditDue')      !== undefined) t.due      = g('tlEditDue');
+  t.updated = Date.now();
+  tlEditingId = null;
+  saveTaskList(false); renderTaskList();
+  showToast('✏️', 'Task updated');
+}
+// ── Unit Summary tab integration ──
+function addTaskFromUnit(unitId) {
+  if (!tlLoaded) tlLoadLocal();
+  const el = document.getElementById('sumTaskNew'); if (!el) return;
+  const text = (el.value || '').trim(); if (!text) return;
+  const me = tlMe();
+  const now = Date.now();
+  TASK_DATA.tasks.push({
+    id: tlUid(), text, person: me ? me.id : 'unassigned',
+    priority: 'medium', unit: String(unitId), due: '', done: false, created: now, updated: now,
+  });
+  el.value = '';
+  saveTaskList(false);
+  if (typeof drawPanel === 'function') drawPanel();
+  showToast('✅', 'Task added to #' + unitId);
+}
+function tlToggleTaskFromUnit(id) {
+  const t = TASK_DATA.tasks.find(x => x.id === id); if (!t) return;
+  t.done = !t.done; t.updated = Date.now();
+  saveTaskList(false);
+  if (typeof drawPanel === 'function') drawPanel();
+}
+function openTaskListForUnit(unitId) {
+  openTaskList();
+  tlFilter = 'all';
+  tlSearch = String(unitId);
+  setTlView('today');
+}
+// Jump from a task straight to the garage it belongs to.
+function openUnitFromTask(unitId) {
+  if (typeof DATA !== 'object' || !DATA[unitId]) { showToast('⚠️', 'Unit #' + unitId + ' not found'); return; }
+  closeTaskList();
+  openUnit(unitId);
+  if (typeof switchTab === 'function') switchTab('summary');
 }
 
 // ── render: People ──
@@ -3439,17 +3619,22 @@ function renderTlPeople() {
 
   h += `<div class="tl-sec-title">People (${sorted.length}${sorted.length !== people.length ? ' of ' + people.length : ''})</div>`;
   if (!sorted.length) h += `<div style="font-size:12px;color:#5A6A85;margin-bottom:8px">${people.length ? 'Nobody matches this filter.' : 'No people yet — add one above.'}</div>`;
+  const meId = (tlMe() || {}).id;
   sorted.forEach(p => {
     const openN = tlTasks().filter(t => t.person === p.id && !t.done).length;
     const color = tlPersonColor(p);
+    const isMe = p.id === meId;
     h += `<div class="tl-person" style="border-left:3px solid ${color}">
       <span class="tl-dot" style="background:${color}"></span>
       <div style="flex:1;min-width:0">
-        <div style="font-weight:700;color:#DDD5B8">${p.priorityPerson ? '⭐ ' : ''}${escHtml(p.name)}</div>
+        <div style="font-weight:700;color:#DDD5B8">${p.priorityPerson ? '⭐ ' : ''}${escHtml(p.name)}${isMe ? ' <span style="font-size:10px;color:#90D060;font-weight:800">· YOU</span>' : ''}</div>
         <div style="font-size:11px;color:#7A8C6A">${openN} open task${openN !== 1 ? 's' : ''}</div>
       </div>
       <select onchange="tlSetDept('${p.id}',this.value)" title="Department"
         style="width:auto;font-size:11px;padding:4px 6px;border-color:${color}">${tlDeptOptions(p.department || 'Contractors')}</select>
+      <button class="tl-star ${isMe ? 'on' : ''}" style="${isMe ? 'color:#90D060' : ''}"
+        onclick="${isMe ? `tlUnclaimMe('${p.id}')` : `tlClaimMe('${p.id}')`}"
+        title="${isMe ? 'This is your list — tap to unlink' : 'Mark this person as me'}">${isMe ? '🙋' : '👤'}</button>
       <button class="tl-star ${p.priorityPerson ? 'on' : ''}" onclick="tlTogglePriorityPerson('${p.id}')"
         title="${p.priorityPerson ? 'Remove red priority' : 'Mark as red priority'}">${p.priorityPerson ? '⭐' : '☆'}</button>
       <button class="tl-del" onclick="tlDeletePerson('${p.id}')" title="Delete person">🗑</button>
@@ -3491,7 +3676,13 @@ function renderTlJobLog() {
       <input type="date" id="tlJobDate" value="${tlTodayISO()}" style="${inp}">
     </div>
     <textarea id="tlJobNote" placeholder="Note / update…" style="width:100%;margin-top:8px;${inp};min-height:60px;resize:vertical"></textarea>
-    <input id="tlJobPhoto" placeholder="Photo URL — paste a link from Google Photos/Drive" style="width:100%;margin-top:8px;${inp}">
+    <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+      <button class="btn btn-gray" style="font-size:12px" onclick="document.getElementById('tlJobFiles').click()">📷 Add Photos</button>
+      <input type="file" id="tlJobFiles" accept="image/*" multiple style="display:none" onchange="tlJobPickFiles(this)">
+      <span id="tlJobPickCount" style="font-size:11px;color:#7A8C6A;align-self:center">${TL_JOB_PENDING.length ? TL_JOB_PENDING.length + ' photo(s) ready' : 'No photos selected'}</span>
+    </div>
+    <input id="tlJobPhoto" placeholder="…or paste a photo link (Google Photos/Drive)" style="width:100%;margin-top:8px;${inp}">
+    <div id="tlJobProgress" style="display:none;font-size:11px;color:#C4A26A;margin-top:6px"></div>
     <button class="btn btn-tan" style="width:100%;font-size:13px;margin-top:8px" onclick="tlAddJob()">+ Add Log Entry</button>
   </div>`;
   const log = [...tlJobs()].sort((a, b) => {
@@ -3509,9 +3700,24 @@ function renderTlJobLog() {
         <button class="tl-del" onclick="tlDeleteJob('${e.id}')" title="Delete entry">🗑</button>
       </div>
       ${e.note ? `<div style="font-size:13px;color:#DDD5B8;margin-top:6px;white-space:pre-wrap">${escHtml(e.note)}</div>` : ''}
-      ${tlJobPhoto(e.photo)}
+      ${tlJobPhotos(e)}
     </div>`;
   });
+  return h;
+}
+// Uploaded photos render as a thumbnail strip; a pasted link still works.
+function tlJobPhotos(e) {
+  let h = '';
+  const shots = Array.isArray(e.photos) ? e.photos : [];
+  if (shots.length) {
+    h += `<div class="cs-photos">` + shots.map((p, i) => `
+      <div class="cs-photo">
+        <img src="${escAttr(p.url)}" alt="${escAttr(p.name || 'job photo')}" loading="lazy"
+          onclick="openLightbox('${escAttr(p.url)}','${escAttr(p.name || 'Job photo')}')">
+        <button class="cs-photo-del" title="Delete photo" onclick="tlDeleteJobPhoto('${e.id}',${i})">✕</button>
+      </div>`).join('') + `</div>`;
+  }
+  if (e.photo) h += tlJobPhoto(e.photo);
   return h;
 }
 function tlJobPhoto(url) {
@@ -3529,9 +3735,10 @@ function tlAddTask() {
   const el = document.getElementById('tlNewTask'); const text = (el.value || '').trim(); if (!text) return;
   const person = (document.getElementById('tlNewPerson') || {}).value || 'unassigned';
   const priority = (document.getElementById('tlNewPriority') || {}).value || 'medium';
+  const unit = (document.getElementById('tlNewUnit') || {}).value || '';
   const due = (document.getElementById('tlNewDue') || {}).value || '';
   const now = Date.now();
-  TASK_DATA.tasks.push({ id: tlUid(), text, person, priority, due, done: false, created: now, updated: now });
+  TASK_DATA.tasks.push({ id: tlUid(), text, person, priority, unit, due, done: false, created: now, updated: now });
   el.value = '';
   const d = document.getElementById('tlNewDue'); if (d) d.value = '';
   saveTaskList(false);
@@ -3607,13 +3814,77 @@ function tlAddJob() {
   const photo = (document.getElementById('tlJobPhoto').value || '').trim();
   if (!job && !note && !photo) { showToast('⚠️', 'Enter a job name or note'); return; }
   const now = Date.now();
-  TASK_DATA.jobLog.push({ id: tlUid('j'), job, date, note, photo, created: now, updated: now });
+  const entry = { id: tlUid('j'), job, date, note, photo, photos: [], created: now, updated: now };
+  TASK_DATA.jobLog.push(entry);
   document.getElementById('tlJob').value = '';
   document.getElementById('tlJobNote').value = '';
   document.getElementById('tlJobPhoto').value = '';
   saveTaskList(false);
+  if (TL_JOB_PENDING.length) tlUploadJobPhotos(entry.id);
+  else { renderTaskList(); showToast('🏗', 'Log entry added & saved'); }
+}
+
+// ── Job log photo uploads ──
+// The entry is saved before the upload starts, so a failed or interrupted
+// upload never costs you the note you already typed.
+function tlJobPickFiles(input) {
+  const files = Array.from(input.files || []).filter(f => {
+    if (!f.type.startsWith('image/')) { showToast('⚠️', f.name + ' is not an image'); return false; }
+    if (f.size > 15 * 1024 * 1024) { showToast('⚠️', f.name + ' is over 15 MB'); return false; }
+    return true;
+  });
+  TL_JOB_PENDING = files;
+  input.value = '';
+  const lbl = document.getElementById('tlJobPickCount');
+  if (lbl) lbl.textContent = files.length ? files.length + ' photo(s) ready' : 'No photos selected';
+}
+async function tlUploadJobPhotos(entryId) {
+  const files = TL_JOB_PENDING.slice();
+  TL_JOB_PENDING = [];
+  if (!files.length) return;
+  if (!firebaseReady || !storage) {
+    showToast('❌', 'Not connected — entry saved, photos were not uploaded');
+    renderTaskList(); return;
+  }
+  const prog = document.getElementById('tlJobProgress');
+  let done = 0;
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    if (prog) { prog.style.display = 'block'; prog.textContent = `Uploading ${i + 1} of ${files.length}: ${f.name}…`; }
+    const safe = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `tasklist/photos/${Date.now()}_${safe}`;
+    try {
+      const ref = storage.ref(path);
+      await ref.put(f);
+      const url = await ref.getDownloadURL();
+      const entry = TASK_DATA.jobLog.find(x => x.id === entryId);
+      if (entry) {
+        if (!Array.isArray(entry.photos)) entry.photos = [];
+        entry.photos.push({ url, name: f.name, path });
+        entry.updated = Date.now();
+        saveTaskList(false);   // save after each photo — a partial upload is never lost
+      }
+      done++;
+    } catch (e) {
+      console.error('Job photo upload failed:', e);
+      showToast('❌', 'Upload failed: ' + (e.code || e.message || 'unknown'));
+    }
+  }
+  if (prog) { prog.style.display = 'none'; prog.textContent = ''; }
   renderTaskList();
-  showToast('🏗', 'Log entry added & saved');
+  showToast('🏗', done ? `Log entry saved with ${done} photo${done > 1 ? 's' : ''}` : 'Log entry saved');
+}
+async function tlDeleteJobPhoto(entryId, idx) {
+  if (!confirm('Delete this photo?')) return;
+  const entry = TASK_DATA.jobLog.find(x => x.id === entryId); if (!entry || !entry.photos) return;
+  const p = entry.photos[idx]; if (!p) return;
+  if (firebaseReady && p.path) {
+    try { await storage.ref(p.path).delete(); } catch (e) { console.warn('Storage delete skipped:', e.code); }
+  }
+  entry.photos.splice(idx, 1);
+  entry.updated = Date.now();
+  saveTaskList(false); renderTaskList();
+  showToast('🗑', 'Photo deleted');
 }
 function tlDeleteJob(id) {
   if (!confirm('Delete this log entry?')) return;
