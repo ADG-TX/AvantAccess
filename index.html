@@ -180,8 +180,50 @@
     #toast.show{transform:translateY(0);opacity:1}
 
     /* ── Responsive panel ── */
+    /* Main content area fills the viewport below the header+stats; dvh handles
+       mobile browser chrome. Falls back to vh where dvh is unsupported. */
+    #mainLayout{height:calc(100vh - 128px);height:calc(100dvh - 128px)}
+
+    /* ══ Tablets & phones (≤1024px) ══ */
+    @media(max-width:1024px){
+      #detailPanel{width:56%}
+    }
+
+    /* ══ Phones & small tablets (≤768px) ══ */
     @media(max-width:768px){
-      #detailPanel{position:fixed;inset:0;width:100%!important;z-index:40}
+      /* Never allow sideways scroll/clipping on phones */
+      html,body{overflow-x:hidden}
+      /* Detail panel + full-screen overlays cover the screen (override the
+         desktop min-width:420px that would otherwise overflow a phone) */
+      #detailPanel{position:fixed;inset:0;width:100%!important;min-width:0!important;max-width:100%!important;z-index:60}
+      #welcomePanel{display:none!important}
+      #mainLayout{height:auto;min-height:calc(100dvh - 150px)}
+      /* Header: tighter, wraps cleanly, buttons stay tappable */
+      header .hdr-sub{display:none}
+      header > div{padding:8px 10px;gap:8px}
+      #searchInput{font-size:16px}
+      /* Prevent iOS auto-zoom on focus (needs ≥16px) */
+      input,select,textarea{font-size:16px}
+      /* Overlay heads wrap instead of overflowing */
+      .b7-head,.tl-head{flex-wrap:wrap;gap:8px;padding:12px 14px}
+      .b7-body,.tl-body{padding:12px}
+      /* Give tap targets a comfortable minimum */
+      .btn{min-height:34px}
+      .tl-chk{width:24px;height:24px}
+      /* Modals sit near the top so the on-screen keyboard doesn't hide inputs */
+      .modal-wrap{align-items:flex-start;padding:10px}
+      .modal-box{padding:16px;max-height:94vh}
+      /* Single-column cards on small screens */
+      .sum-cards,.cs-sections-grid{grid-template-columns:1fr}
+      /* Slide-in drawers fit the phone width */
+      #intakePanel{width:min(400px,88vw)}
+    }
+
+    /* ══ Very small phones (≤430px) ══ */
+    @media(max-width:430px){
+      header .brand-text{display:none}
+      /* Stack add-row fields full-width (beats inline flex sizing) */
+      .tl-addrow input,.tl-addrow select{flex:1 1 100%!important;min-width:0!important}
     }
 
     /* ── Intake notification badge & panel ── */
@@ -349,9 +391,9 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
         </svg>
       </div>
-      <div>
+      <div class="brand-text">
         <div style="font-size:13px;font-weight:800;color:#C4A26A;line-height:1.1;letter-spacing:.04em">AVANT DEVELOPMENT GROUP</div>
-        <div style="font-size:10px;color:#7A8C6A;letter-spacing:.04em">GOTA HVAC Management · Austin, TX</div>
+        <div class="hdr-sub" style="font-size:10px;color:#7A8C6A;letter-spacing:.04em">GOTA HVAC Management · Austin, TX</div>
       </div>
     </div>
 
@@ -449,7 +491,7 @@
 <!-- ═══════════════════════════════════════════════
      MAIN LAYOUT
 ═══════════════════════════════════════════════ -->
-<div style="display:flex;height:calc(100vh - 128px)">
+<div id="mainLayout" style="display:flex">
 
   <!-- ── MAP VIEW ── -->
   <div id="mapView" style="flex:1;overflow:auto;padding:16px">
