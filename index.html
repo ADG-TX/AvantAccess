@@ -3020,7 +3020,10 @@ function tlNormalize(d) {
 }
 
 // ── open / close / views ──
-function openTaskList() { document.getElementById('taskList').classList.add('open'); setTlView('today'); }
+function openTaskList() {
+  document.getElementById('taskList').classList.add('open');
+  loadTaskList().then(() => setTlView('today'));
+}
 function closeTaskList() { document.getElementById('taskList').classList.remove('open'); }
 function setTlView(v) {
   tlView = v;
@@ -3202,7 +3205,9 @@ function tlAddTask() {
   TASK_DATA.tasks.push({ id: tlUid(), text, person, priority, due, done: false, created: Date.now() });
   document.getElementById('tlNewTask').value = '';
   document.getElementById('tlNewDue').value = '';
-  saveTaskList(); renderTaskList();
+  saveTaskList(false);
+  renderTaskList();
+  showToast('✅', 'Task added & saved');
 }
 function tlAddTaskFor(personId) {
   const el = document.getElementById('tlpn_' + personId); if (!el) return;
@@ -3212,16 +3217,20 @@ function tlAddTaskFor(personId) {
   TASK_DATA.tasks.push({ id: tlUid(), text, person: personId, priority, due, done: false, created: Date.now() });
   document.getElementById('tlpn_' + personId).value = '';
   document.getElementById('tlpd_' + personId).value = '';
-  saveTaskList(); renderTaskList();
+  saveTaskList(false);
+  renderTaskList();
+  showToast('✅', 'Task added & saved');
 }
-function tlToggleTask(id) { const t = TASK_DATA.tasks.find(x => x.id === id); if (!t) return; t.done = !t.done; saveTaskList(); renderTaskList(); }
-function tlDeleteTask(id) { TASK_DATA.tasks = TASK_DATA.tasks.filter(x => x.id !== id); saveTaskList(); renderTaskList(); }
+function tlToggleTask(id) { const t = TASK_DATA.tasks.find(x => x.id === id); if (!t) return; t.done = !t.done; saveTaskList(false); renderTaskList(); }
+function tlDeleteTask(id) { TASK_DATA.tasks = TASK_DATA.tasks.filter(x => x.id !== id); saveTaskList(false); renderTaskList(); showToast('🗑', 'Task deleted'); }
 function tlAddPerson() {
   const el = document.getElementById('tlNewPersonName'); const name = (el.value || '').trim(); if (!name) return;
   const department = (document.getElementById('tlNewPersonDept') || {}).value || 'Contractors';
   TASK_DATA.people.push({ id: tlUid('p'), name, department });
   document.getElementById('tlNewPersonName').value = '';
-  saveTaskList(); renderTaskList();
+  saveTaskList(false);
+  renderTaskList();
+  showToast('👤', 'Person added & saved');
 }
 function tlDeletePerson(id) {
   const p = TASK_DATA.people.find(x => x.id === id); if (!p) return;
@@ -3234,7 +3243,9 @@ function tlDeletePerson(id) {
     if (!confirm(`Delete "${p.name}"?`)) return;
   }
   TASK_DATA.people = TASK_DATA.people.filter(x => x.id !== id);
-  saveTaskList(); renderTaskList();
+  saveTaskList(false);
+  renderTaskList();
+  showToast('🗑', 'Person deleted');
 }
 function tlAddJob() {
   const job = (document.getElementById('tlJob').value || '').trim();
@@ -3243,10 +3254,14 @@ function tlAddJob() {
   const photo = (document.getElementById('tlJobPhoto').value || '').trim();
   if (!job && !note && !photo) { showToast('⚠️', 'Enter a job name or note'); return; }
   TASK_DATA.jobLog.push({ id: tlUid('j'), job, date, note, photo, created: Date.now() });
-  saveTaskList(); renderTaskList();
-  showToast('🏗', 'Log entry added');
+  document.getElementById('tlJob').value = '';
+  document.getElementById('tlJobNote').value = '';
+  document.getElementById('tlJobPhoto').value = '';
+  saveTaskList(false);
+  renderTaskList();
+  showToast('🏗', 'Log entry added & saved');
 }
-function tlDeleteJob(id) { if (!confirm('Delete this log entry?')) return; TASK_DATA.jobLog = TASK_DATA.jobLog.filter(x => x.id !== id); saveTaskList(); renderTaskList(); }
+function tlDeleteJob(id) { if (!confirm('Delete this log entry?')) return; TASK_DATA.jobLog = TASK_DATA.jobLog.filter(x => x.id !== id); saveTaskList(false); renderTaskList(); showToast('🗑', 'Log deleted'); }
 
 function renderPhotoGrid() {
   const grid = document.getElementById('photoGrid');
