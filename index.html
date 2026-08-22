@@ -1350,19 +1350,30 @@ async function init() {
 }
 
 function buildDefaults() {
-  const GREE_BLDGS = new Set(['B4','B5','B6','B8','B9']);
+  // Two equipment generations on site. Buildings 4/5/6/8/9 went in on R-410A.
+  // Building 7 onward is the R-32 (A2L) package — different condenser, and a
+  // 24k over the stairs with an 18k on the mezzanine rather than two 24s.
+  const GREE_410A = new Set(['B4','B5','B6','B8','B9']);
+  const GREE_R32  = new Set(['B7','B10','B11','B12','B13','B14','B15']);
   LAYOUT.forEach(s => s.groups.forEach(g => g.rows.forEach(row => row.forEach(id => {
-    const isGree = GREE_BLDGS.has(g.id);
+    const is410 = GREE_410A.has(g.id);
+    const isR32 = GREE_R32.has(g.id);
+    const refrig = isR32 ? 'R-32' : 'R-410A';
     DATA[id] = {
       id, building: g.name, size: g.size, status: 'unconfigured',
       hvacModel:'', hvacBTU:'', hvacSerial:'', installDate:'', warrantyExpires:'',
-      filterSize:'', refrigerant:'R-410A', lastService:'', nextService:'',
-      condenser: isGree
-        ? { model:'GMV-60W/L/C-T(U)', serial:'', installDate:'', warrantyExpires:'', refrigerant:'R-410A' }
+      filterSize:'', refrigerant: refrig, lastService:'', nextService:'',
+      condenser: is410
+        ? { model:'GMV-60W/L/C-T(U)',     serial:'', installDate:'', warrantyExpires:'', refrigerant:'R-410A' }
+        : isR32
+        ? { model:'GMV-V60WL/NhC-T(U)',   serial:'', installDate:'', warrantyExpires:'', refrigerant:'R-32' }
         : { model:'', serial:'', installDate:'', warrantyExpires:'', refrigerant:'' },
-      headUnits: isGree
+      headUnits: is410
         ? [ { model:'GMV-ND24G/B4B-T(U)', btu:'24,000', serial:'', filterSize:'' },
             { model:'GMV-ND24G/B4B-T(U)', btu:'24,000', serial:'', filterSize:'' } ]
+        : isR32
+        ? [ { model:'GMV-ND24G/NhA1C-T(U)', btu:'24,000', serial:'', filterSize:'', location:'Above stairs' },
+            { model:'GMV-ND18G/NhA1C-T(U)', btu:'18,000', serial:'', filterSize:'', location:'Mezzanine' } ]
         : [],
       hasContractor: false,
       contractorName:'', contractorCompany:'', contractorPhone:'',
@@ -4249,8 +4260,13 @@ function removeHeadUnit(idx) {
 function updateHeadModel(i, val) {
   const btuEl = document.getElementById(`hu_${i}_btu`);
   if (!btuEl) return;
-  if (val === 'GMV-ND24G/B4B-T(U)') { btuEl.value = '24,000'; btuEl.readOnly = true; }
-  else if (val === 'GMV-ND18G/B4B-T(U)') { btuEl.value = '18,000'; btuEl.readOnly = true; }
+  const KNOWN_BTU = {
+    'GMV-ND24G/B4B-T(U)':   '24,000',   // R-410A · bldgs 4/5/6/8/9
+    'GMV-ND18G/B4B-T(U)':   '18,000',
+    'GMV-ND24G/NhA1C-T(U)': '24,000',   // R-32 · bldg 7 onward
+    'GMV-ND18G/NhA1C-T(U)': '18,000',
+  };
+  if (KNOWN_BTU[val]) { btuEl.value = KNOWN_BTU[val]; btuEl.readOnly = true; }
   else { btuEl.value = ''; btuEl.readOnly = false; }
   // Show/hide custom model field by re-rendering (simpler than DOM surgery)
   captureHvacFormIntoData();
@@ -4299,8 +4315,14 @@ function hvacForm(u) {
     </div>`;
 }
 
+const HEAD_MODELS = [
+  { v:'GMV-ND24G/NhA1C-T(U)', btu:'24K', gas:'R-32'   },   // bldg 7 onward
+  { v:'GMV-ND18G/NhA1C-T(U)', btu:'18K', gas:'R-32'   },
+  { v:'GMV-ND24G/B4B-T(U)',   btu:'24K', gas:'R-410A' },   // bldgs 4/5/6/8/9
+  { v:'GMV-ND18G/B4B-T(U)',   btu:'18K', gas:'R-410A' },
+];
 function headUnitRow(h, i) {
-  const isKnown = h.model === 'GMV-ND24G/B4B-T(U)' || h.model === 'GMV-ND18G/B4B-T(U)';
+  const isKnown = HEAD_MODELS.some(m => m.v === h.model);
   const selModel = isKnown ? h.model : 'custom';
   return `
     <div style="background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:12px;margin-bottom:8px" id="hu_row_${i}">
@@ -4311,8 +4333,7 @@ function headUnitRow(h, i) {
       <div style="display:flex;flex-direction:column;gap:8px">
         <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Model</label>
           <select id="hu_${i}_model" onchange="updateHeadModel(${i},this.value)" style="width:100%">
-            <option value="GMV-ND24G/B4B-T(U)" ${selModel==='GMV-ND24G/B4B-T(U)'?'selected':''}>24K BTU — GMV-ND24G/B4B-T(U)</option>
-            <option value="GMV-ND18G/B4B-T(U)" ${selModel==='GMV-ND18G/B4B-T(U)'?'selected':''}>18K BTU — GMV-ND18G/B4B-T(U)</option>
+            ${HEAD_MODELS.map(m => `<option value="${m.v}" ${selModel===m.v?'selected':''}>${m.btu} BTU · ${m.gas} — ${m.v}</option>`).join('')}
             <option value="custom" ${selModel==='custom'?'selected':''}>Other / Custom model</option>
           </select>
         </div>
