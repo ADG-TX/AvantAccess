@@ -83,21 +83,14 @@
     .mat-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:9px;font-weight:800;
               color:#5F7A8A;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px}
     .mat-sum{color:#7FD8F0;font-weight:800;letter-spacing:0;font-size:11px;font-variant-numeric:tabular-nums}
-    .mat-rows{display:flex;flex-direction:column;gap:4px;margin-bottom:6px}
-    .mat-row{display:grid;grid-template-columns:minmax(0,1fr) 52px 62px 62px 68px 22px;gap:4px;align-items:center}
-    .mat-row input,.mat-row select{background:#07090F;border:1px solid #16283A;color:#C8D0E0;border-radius:5px;
-                                   padding:5px 6px;font-size:11px;width:100%;min-width:0}
-    .mat-row input:focus,.mat-row select:focus{border-color:#4FB8D8}
-    .mat-row .mat-qty,.mat-row .mat-price{text-align:right;font-variant-numeric:tabular-nums}
-    .mat-line{font-size:11px;color:#90D060;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
-    .mat-del{background:none;border:none;color:#8A5A5A;cursor:pointer;font-size:11px;font-weight:800;padding:0}
-    .mat-foot{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .mat-add{background:#0A1620;border:1px dashed #2A5878;color:#7FD8F0;border-radius:5px;padding:5px 10px;
-             font-size:11px;font-weight:700;cursor:pointer}
-    .mat-add:hover{border-color:#4FB8D8;background:#0E2030}
-    .mat-hours{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#7A8C6A;white-space:nowrap}
-    .mat-hours input{width:56px;background:#07090F;border:1px solid #16283A;color:#C8D0E0;border-radius:5px;
-                     padding:5px 6px;font-size:11px;text-align:right;font-variant-numeric:tabular-nums}
+    .mat-entry{display:grid;grid-template-columns:110px 92px minmax(0,1fr);gap:6px;align-items:end}
+    .mat-f{display:flex;flex-direction:column;gap:3px;min-width:0}
+    .mat-f>span{font-size:9px;font-weight:700;color:#5F7A8A;letter-spacing:.05em;text-transform:uppercase}
+    .mat-f input{background:#07090F;border:1px solid #16283A;color:#C8D0E0;border-radius:5px;
+                 padding:6px 8px;font-size:12px;width:100%;min-width:0}
+    .mat-f input:focus{border-color:#4FB8D8}
+    .mat-cost,.mat-hrs{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+    .mat-cost{color:#7FD8F0!important}
 
     /* ── HVAC job tab ── */
     .hv-econ{background:#08131B;border:1px solid #1A3A4A;border-radius:8px;padding:12px;margin-bottom:12px}
@@ -121,15 +114,9 @@
              background:#08131B;border:1px solid #1A3A4A;border-radius:8px;padding:10px 12px;margin-bottom:12px;
              font-size:12px;color:#B8CEDA}
     .hv-jump:hover{border-color:#4FB8D8}
-    @media(max-width:768px){
-      .mat-row{grid-template-columns:minmax(0,1fr) 46px 54px 56px 1fr 22px}
-      .mat-row .mat-line{grid-column:5}
-    }
-    @media(max-width:430px){
-      .mat-row{grid-template-columns:minmax(0,1fr) 44px 48px;grid-auto-rows:auto;row-gap:3px}
-      .mat-row .mat-price{grid-column:1}
-      .mat-row .mat-line{grid-column:2/4;text-align:left}
-      .mat-row .mat-del{position:absolute;right:6px}
+    @media(max-width:560px){
+      .mat-entry{grid-template-columns:1fr 1fr}
+      .mat-f-wide{grid-column:1/-1}
     }
 
     /* ── Building 7 Board (command center) ── */
@@ -2361,33 +2348,46 @@ function constItem(u, key) {
   // migrate legacy 3-state values to the new set
   if (it.status === 'in_progress') it.status = 'incomplete';
   else if (it.status === 'done')   it.status = 'finished';
-  if (!Array.isArray(it.materials)) it.materials = [];
   if (typeof it.hours !== 'number') it.hours = Number(it.hours) || 0;
+  if (typeof it.materialCost !== 'number') it.materialCost = Number(it.materialCost) || 0;
+  if (typeof it.materialNote !== 'string') it.materialNote = it.materialNote ? String(it.materialNote) : '';
+  // Carry over anything logged under the earlier itemised system so no spend
+  // entered before this change is lost.
+  if (Array.isArray(it.materials) && it.materials.length) {
+    if (!it.materialCost) {
+      it.materialCost = it.materials.reduce((s, m) => s + (Number(m.qty) || 0) * (Number(m.price) || 0), 0);
+    }
+    if (!it.materialNote) {
+      it.materialNote = it.materials.map(m => m.name).filter(Boolean).join(', ');
+    }
+    delete it.materials;
+  }
   return it;
 }
 
 // ════════════════════════════════════════════════════════════
 // MATERIALS & LABOR — what each task consumed, and what it cost
 // ════════════════════════════════════════════════════════════
-const MAT_UNITS = ['ft', 'ea', 'box', 'roll', 'lb', 'gal', 'tube', 'bag', 'hr'];
-function matLineTotal(m) { return (Number(m.qty) || 0) * (Number(m.price) || 0); }
-function itemMaterialTotal(d) { return (d.materials || []).reduce((s, m) => s + matLineTotal(m), 0); }
+// Material spend is entered by hand, per task, per garage — the exact figure
+// off the receipt, not a quantity-times-price estimate.
+function itemMaterialTotal(d) { return Number(d.materialCost) || 0; }
 function money(n) { return '$' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function money0(n) { return '$' + Math.round(Number(n) || 0).toLocaleString('en-US'); }
 
 // Roll every item in a trade up to a garage-level total.
 function tradeTotals(u, tradeId) {
-  let materials = 0, hours = 0, lines = 0, done = 0, total = 0;
-  if (!u) return { materials, hours, lines, done, total };
+  let materials = 0, hours = 0, logged = 0, done = 0, total = 0;
+  if (!u) return { materials, hours, logged, done, total };
   tradeItems(u, tradeId).forEach(it => {
     const d = constItem(u, it.key);
-    materials += itemMaterialTotal(d);
+    const c = itemMaterialTotal(d);
+    materials += c;
     hours += Number(d.hours) || 0;
-    lines += (d.materials || []).length;
+    if (c) logged++;
     total++;
     if (d.status === 'finished') done++;
   });
-  return { materials, hours, lines, done, total };
+  return { materials, hours, logged, done, total };
 }
 // Same rollup across every garage in Building 7.
 function buildingTradeTotals(tradeId) {
@@ -2401,29 +2401,15 @@ function buildingTradeTotals(tradeId) {
   return { materials, hours, garages };
 }
 
-function addConstMaterial(key) {
+function setConstMaterialCost(key, value) {
   const u = DATA[selectedId]; if (!u) return;
-  const d = constItem(u, key);
-  d.materials.push({ id: 'm' + Date.now() + '_' + Math.floor(Math.random() * 1000), name: '', qty: '', unit: 'ft', price: '' });
+  constItem(u, key).materialCost = Number(String(value).replace(/[^0-9.]/g, '')) || 0;
   constTouch(u); persist(); drawPanel(); switchTab(activeTab);
-  setTimeout(() => {
-    const rows = document.querySelectorAll(`[data-mat-key="${key}"] .mat-name`);
-    const last = rows[rows.length - 1]; if (last) last.focus();
-  }, 30);
 }
-function updateConstMaterial(key, idx, field, value) {
+function setConstMaterialNote(key, value) {
   const u = DATA[selectedId]; if (!u) return;
-  const d = constItem(u, key);
-  const m = d.materials[idx]; if (!m) return;
-  m[field] = (field === 'qty' || field === 'price') ? value.replace(/[^0-9.]/g, '') : value;
+  constItem(u, key).materialNote = String(value || '');
   constTouch(u); persist();
-  if (field === 'qty' || field === 'price') { drawPanel(); switchTab(activeTab); }
-}
-function deleteConstMaterial(key, idx) {
-  const u = DATA[selectedId]; if (!u) return;
-  const d = constItem(u, key);
-  d.materials.splice(idx, 1);
-  constTouch(u); persist(); drawPanel(); switchTab(activeTab);
 }
 function setConstHours(key, value) {
   const u = DATA[selectedId]; if (!u) return;
@@ -2436,38 +2422,35 @@ function setHvacContract(value) {
   persist(); drawPanel(); switchTab(activeTab);
 }
 
-// Materials + hours block shown under each task.
+// What this task cost in material and time on this garage. Both typed in by
+// hand — the point is an exact figure per garage, not an estimate.
 function matBlockHtml(u, it) {
   const d = constItem(u, it.key);
-  const mats = d.materials || [];
-  const tot = itemMaterialTotal(d);
-  let h = `<div class="mat-wrap" data-mat-key="${it.key}">
+  const cost = Number(d.materialCost) || 0;
+  const hrs = Number(d.hours) || 0;
+  return `<div class="mat-wrap" data-mat-key="${it.key}">
     <div class="mat-head">
-      <span>Materials &amp; labor</span>
-      <span class="mat-sum">${mats.length ? money(tot) : ''}${(Number(d.hours)||0) ? ` · ${d.hours} hr` : ''}</span>
-    </div>`;
-  if (mats.length) {
-    h += `<div class="mat-rows">`;
-    mats.forEach((m, i) => {
-      h += `<div class="mat-row">
-        <input class="mat-name" value="${escAttr(m.name || '')}" placeholder="Material" onchange="updateConstMaterial('${it.key}',${i},'name',this.value)">
-        <input class="mat-qty" value="${escAttr(m.qty || '')}" placeholder="Qty" inputmode="decimal" onchange="updateConstMaterial('${it.key}',${i},'qty',this.value)">
-        <select class="mat-unit" onchange="updateConstMaterial('${it.key}',${i},'unit',this.value)">
-          ${MAT_UNITS.map(x => `<option value="${x}" ${x === (m.unit || 'ft') ? 'selected' : ''}>${x}</option>`).join('')}
-        </select>
-        <input class="mat-price" value="${escAttr(m.price || '')}" placeholder="$/unit" inputmode="decimal" onchange="updateConstMaterial('${it.key}',${i},'price',this.value)">
-        <span class="mat-line">${matLineTotal(m) ? money(matLineTotal(m)) : '—'}</span>
-        <button class="mat-del" title="Remove material" onclick="deleteConstMaterial('${it.key}',${i})">✕</button>
-      </div>`;
-    });
-    h += `</div>`;
-  }
-  h += `<div class="mat-foot">
-      <button class="mat-add" onclick="addConstMaterial('${it.key}')">+ Material</button>
-      <label class="mat-hours">Time <input value="${escAttr(d.hours || '')}" placeholder="0" inputmode="decimal" onchange="setConstHours('${it.key}',this.value)"> hrs</label>
+      <span>Material &amp; time on this garage</span>
+      <span class="mat-sum">${cost ? money(cost) : ''}${cost && hrs ? ' · ' : ''}${hrs ? hrs + ' hr' : ''}</span>
+    </div>
+    <div class="mat-entry">
+      <label class="mat-f">
+        <span>Material $</span>
+        <input class="mat-cost" value="${escAttr(cost || '')}" placeholder="0.00" inputmode="decimal"
+          onchange="setConstMaterialCost('${it.key}',this.value)">
+      </label>
+      <label class="mat-f">
+        <span>Time (hrs)</span>
+        <input class="mat-hrs" value="${escAttr(hrs || '')}" placeholder="0" inputmode="decimal"
+          onchange="setConstHours('${it.key}',this.value)">
+      </label>
+      <label class="mat-f mat-f-wide">
+        <span>What it covered</span>
+        <input class="mat-note" value="${escAttr(d.materialNote || '')}" placeholder="optional — line set, whip, pump…"
+          onchange="setConstMaterialNote('${it.key}',this.value)">
+      </label>
     </div>
   </div>`;
-  return h;
 }
 
 function customItemsFor(sectionId, unitId) {
@@ -2622,7 +2605,6 @@ function hvacJobTabHtml(u) {
   const contract = u.hvacContract != null ? Number(u.hvacContract) : 3500;
   const net = contract - t.materials;
   const rate = t.hours > 0 ? net / t.hours : 0;
-  const matFlag = t.materials > 600 ? 'over' : t.materials >= 500 ? 'at' : t.materials > 0 ? 'under' : 'none';
   const cond = u.condenser || {};
   const heads = u.headUnits || [];
 
@@ -2640,12 +2622,12 @@ function hvacJobTabHtml(u) {
         <input class="hv-contract" value="${escAttr(contract)}" inputmode="decimal" onchange="setHvacContract(this.value)">
       </label>
       <div class="hv-cell">
-        <span class="hv-k">Materials</span>
-        <span class="hv-v mat-${matFlag}">${money0(t.materials)}</span>
+        <span class="hv-k">Material spent</span>
+        <span class="hv-v" style="color:${t.materials ? '#7FD8F0' : '#4D5C3D'}">${t.materials ? money(t.materials) : '—'}</span>
       </div>
       <div class="hv-cell">
         <span class="hv-k">Net</span>
-        <span class="hv-v" style="color:${net > 0 ? '#90D060' : '#F08080'}">${money0(net)}</span>
+        <span class="hv-v" style="color:${net > 0 ? '#90D060' : '#F08080'}">${money(net)}</span>
       </div>
       <div class="hv-cell">
         <span class="hv-k">Hours</span>
@@ -2657,10 +2639,9 @@ function hvacJobTabHtml(u) {
       </div>
     </div>
     <div class="hv-econ-note">${
-      matFlag === 'over' ? `⚠ Materials are over your $500–600 target by ${money0(t.materials - 600)} on this garage.`
-      : matFlag === 'at' ? `On target — $500–600 is your normal range.`
-      : matFlag === 'under' ? `Under budget by ${money0(500 - t.materials)} against the low end of your range.`
-      : `Log materials against each task below and this fills in.` }</div>
+      t.logged
+        ? `Material logged on ${t.logged} of ${t.total} task${t.total === 1 ? '' : 's'}${t.logged < t.total ? ' — total is exact once every task has a figure.' : ' — this garage is fully costed.'}`
+        : `Enter what you actually spent under each task below and this totals it.` }</div>
   </div>`;
 
   // ── Progress ──
@@ -2707,10 +2688,10 @@ function hvacJobTabHtml(u) {
       <div class="hv-eq-head" style="border:none;padding-bottom:6px">Building 7 · all garages logged so far</div>
       <div class="hv-econ-grid">
         <div class="hv-cell"><span class="hv-k">Garages</span><span class="hv-v">${b.garages}/14</span></div>
-        <div class="hv-cell"><span class="hv-k">Materials</span><span class="hv-v">${money0(b.materials)}</span></div>
-        <div class="hv-cell"><span class="hv-k">Avg / garage</span><span class="hv-v mat-${avgMat > 600 ? 'over' : avgMat >= 500 ? 'at' : 'under'}">${money0(avgMat)}</span></div>
+        <div class="hv-cell"><span class="hv-k">Material</span><span class="hv-v">${money(b.materials)}</span></div>
+        <div class="hv-cell"><span class="hv-k">Avg / garage</span><span class="hv-v" style="color:#7FD8F0">${b.garages ? money(avgMat) : '—'}</span></div>
         <div class="hv-cell"><span class="hv-k">Hours</span><span class="hv-v">${Math.round(b.hours * 10) / 10}</span></div>
-        <div class="hv-cell"><span class="hv-k">Avg hrs</span><span class="hv-v">${Math.round(avgHrs * 10) / 10}</span></div>
+        <div class="hv-cell"><span class="hv-k">Avg hrs</span><span class="hv-v">${b.garages ? Math.round(avgHrs * 10) / 10 : '—'}</span></div>
       </div>
     </div>`;
 
@@ -2750,7 +2731,7 @@ function constructionTabHtml(u) {
   // HVAC lives on its own tab — this one is the other trades.
   const hv = tradeTotals(u, 'hvac');
   html += `<div class="hv-jump" onclick="switchTab('hvacjob')" title="Open the HVAC job tab">
-      <span>❄️ <strong>HVAC</strong> has its own tab — ${hv.done}/${hv.total} done${hv.materials ? ' · ' + money0(hv.materials) + ' materials' : ''}${hv.hours ? ' · ' + hv.hours + ' hrs' : ''}</span>
+      <span>❄️ <strong>HVAC</strong> has its own tab — ${hv.done}/${hv.total} done${hv.materials ? ' · ' + money(hv.materials) + ' material' : ''}${hv.hours ? ' · ' + hv.hours + ' hrs' : ''}</span>
       <span style="color:#7FD8F0;font-weight:800">Open →</span>
     </div>`;
 
