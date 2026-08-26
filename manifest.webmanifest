@@ -1,0 +1,16 @@
+{
+  "name": "GOTA HVAC Management",
+  "short_name": "GOTA",
+  "description": "Garages of the Americas — unit, construction and HVAC tracking",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#07090F",
+  "theme_color": "#0A0C16",
+  "icons": [
+    { "src": "favicon-32.png",  "sizes": "32x32",   "type": "image/png" },
+    { "src": "icon-192.png",    "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png",    "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
