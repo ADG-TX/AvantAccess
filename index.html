@@ -93,6 +93,13 @@
     .cs-trade-meta{font-size:11px;color:#8898B0;margin-bottom:8px;line-height:1.5}
     .cs-blocked{font-size:9px;font-weight:800;color:#F08080;background:#3A0E08;border:1px solid #C0392B;border-radius:20px;padding:2px 8px;letter-spacing:.05em}
 
+    /* ── Serial capture ── */
+    .serial-row{display:flex;gap:6px;align-items:stretch}
+    .serial-row input{flex:1;min-width:0}
+    .serial-cam{flex-shrink:0;background:#0A1620;border:1px solid #2A5878;color:#7FD8F0;border-radius:6px;
+                padding:0 12px;font-size:16px;cursor:pointer;line-height:1}
+    .serial-cam:hover{border-color:#4FB8D8;background:#0E2030}
+
     /* ── Materials & labor per task ── */
     .mat-wrap{margin-top:8px;border-top:1px dashed #1C2D16;padding-top:8px}
     .mat-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:9px;font-weight:800;
@@ -1217,6 +1224,20 @@
   </div>
   <div class="tl-body" id="tlBody"></div>
 </div>
+
+<!-- Offline banner -->
+<div id="netBanner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:150;background:#4A360C;border-top:1px solid #E08800;color:#F5C840;font-size:12px;font-weight:700;padding:9px 14px;align-items:center;justify-content:center;gap:8px;padding-bottom:max(9px,env(safe-area-inset-bottom))">
+  📴 Offline — everything you log is saved here and syncs when signal returns
+</div>
+
+<!-- New version available -->
+<div id="swUpdate" style="display:none;position:fixed;bottom:16px;left:16px;right:16px;z-index:151;background:#0E1120;border:1px solid #C4A26A;border-radius:10px;padding:12px 14px;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 10px 30px rgba(0,0,0,.7);flex-wrap:wrap;margin-bottom:env(safe-area-inset-bottom)">
+  <span style="font-size:12px;color:#F5EDD8;font-weight:600">A newer version of the app is ready.</span>
+  <button onclick="applySwUpdate()" class="btn btn-tan" style="font-size:12px">Reload</button>
+</div>
+
+<!-- Data-plate camera (opens the rear camera on a phone) -->
+<input type="file" id="serialPhotoInput" accept="image/*" capture="environment" style="display:none" onchange="handleSerialPhoto(this)">
 
 <!-- Toast -->
 <div id="toast"></div>
@@ -4710,7 +4731,10 @@ function hvacForm(u) {
         <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Model</label>
           <input id="hv_cond_model" value="${escAttr(cond.model||'')}" placeholder="GMV-60W/L/C-T(U)"></div>
         <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Serial Number</label>
-          <input id="hv_cond_serial" value="${escAttr(cond.serial||'')}" placeholder="Serial #"></div>
+          <div class="serial-row">
+            <input id="hv_cond_serial" value="${escAttr(cond.serial||'')}" placeholder="Serial #">
+            <button type="button" class="serial-cam" onclick="captureSerial('hv_cond_serial','Condenser serial')" title="Photograph the data plate">📷</button>
+          </div></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Install Date</label>
             <input type="date" id="hv_cond_installDate" value="${escAttr(cond.installDate||'')}"></div>
@@ -4772,7 +4796,10 @@ function headUnitRow(h, i) {
             <input id="hu_${i}_filterSize" value="${escAttr(h.filterSize||'')}" placeholder="e.g. 16×20×1"></div>
         </div>
         <div><label style="font-size:11px;color:#7A8C6A;display:block;margin-bottom:4px">Serial Number</label>
-          <input id="hu_${i}_serial" value="${escAttr(h.serial||'')}" placeholder="Serial #"></div>
+          <div class="serial-row">
+            <input id="hu_${i}_serial" value="${escAttr(h.serial||'')}" placeholder="Serial #">
+            <button type="button" class="serial-cam" onclick="captureSerial('hu_${i}_serial','Head unit ${i+1} serial')" title="Photograph the data plate">📷</button>
+          </div></div>
       </div>
     </div>`;
 }
@@ -5599,6 +5626,117 @@ async function blobToBase64Data(blob) {
   });
 }
 
+// ════════════════════════════════════════════════════════════
+// SERIAL CAPTURE — photograph the data plate instead of typing it
+// ════════════════════════════════════════════════════════════
+// 42 serials for Building 7 alone, typed on a phone, where one wrong digit
+// surfaces years later as a denied warranty claim. Photograph the plate: the
+// number is read back for you to confirm, and the photo is kept either way so
+// the original is always checkable.
+let serialTargetField = null;
+let serialTargetLabel = '';
+
+function captureSerial(fieldId, label) {
+  serialTargetField = fieldId;
+  serialTargetLabel = label || 'Serial';
+  const inp = document.getElementById('serialPhotoInput');
+  if (inp) { inp.value = ''; inp.click(); }
+}
+
+async function handleSerialPhoto(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file || !serialTargetField) return;
+  const field = document.getElementById(serialTargetField);
+  if (!field) return;
+
+  const unitId = selectedId;
+  showToast('🔎', 'Reading the data plate…');
+
+  let base64 = '', mediaType = file.type || 'image/jpeg';
+  try {
+    base64 = await blobToBase64Data(file);
+  } catch (e) {
+    showToast('❌', 'Could not read that photo');
+    return;
+  }
+
+  // Keep the plate photo regardless of whether the read succeeds — it is the
+  // evidence behind the number.
+  uploadPlatePhoto(file, unitId, serialTargetLabel);
+
+  if (!ANTHROPIC_API_KEY) {
+    showToast('📷', 'Photo saved to this unit — type the serial in');
+    field.focus();
+    return;
+  }
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'anthropic-dangerous-direct-browser-client': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 120,
+        messages: [{ role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+          { type: 'text', text: 'This is a photo of an HVAC equipment data plate (GREE mini-split condenser or indoor head unit). Find the SERIAL NUMBER — it may be labelled Serial, Serial No., S/N, SN, or Barcode. Reply with ONLY the serial number characters, nothing else. Do not return the model number. If you cannot read a serial with confidence, reply exactly: UNREADABLE' }
+        ]}]
+      })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    const raw = (data.content?.[0]?.text || '').trim();
+
+    if (!raw || /UNREADABLE/i.test(raw) || raw.length > 40) {
+      showToast('⚠️', 'Could not read it — photo saved, type it in');
+      field.focus();
+      return;
+    }
+    const serial = raw.replace(/[^A-Za-z0-9\-\/]/g, '');
+    if (!serial) { showToast('⚠️', 'Could not read it — photo saved'); field.focus(); return; }
+
+    // Always confirm — a misread digit is worse than typing it yourself.
+    if (confirm(`${serialTargetLabel} read from the plate:\n\n${serial}\n\nOK to use it, Cancel to type it yourself.`)) {
+      field.value = serial;
+      field.dispatchEvent(new Event('change', { bubbles: true }));
+      captureHvacFormIntoData();
+      persist();
+      showToast('✅', serialTargetLabel + ' set');
+    } else {
+      field.focus();
+    }
+  } catch (e) {
+    console.warn('Serial read failed:', e);
+    showToast('⚠️', 'Read failed — photo saved, type the serial in');
+    field.focus();
+  }
+}
+
+// Store the plate shot with the unit's photos so it is retrievable later.
+async function uploadPlatePhoto(file, unitId, label) {
+  if (!firebaseReady || !storage || !unitId || !DATA[unitId]) return;
+  try {
+    const safe = ('dataplate-' + label + '-' + Date.now()).replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `units/${unitId}/photos/${safe}.jpg`;
+    const ref = storage.ref(path);
+    await ref.put(file);
+    const url = await ref.getDownloadURL();
+    const u = DATA[unitId]; if (!u) return;
+    if (!u.photos) u.photos = [];
+    u.photos.push({ url, name: label + ' data plate', path, date: toISO(new Date()) });
+    persist(unitId);
+    if (selectedId === unitId && activeTab === 'photos') renderPhotoGrid();
+  } catch (e) {
+    console.warn('Plate photo upload failed:', e);
+  }
+}
+
 // Call Claude Haiku to generate a dense keyword description of an image
 async function claudeDescribeImage(imageUrl) {
   const key = ANTHROPIC_API_KEY;
@@ -6258,6 +6396,51 @@ function handleLogout() {
   if (!confirm('Sign out of the dashboard?')) return;
   auth.signOut();
 }
+
+// ════════════════════════════════════════════════════════════
+// OFFLINE — service worker registration
+// ════════════════════════════════════════════════════════════
+// Caches the app shell so it opens with no signal. Firestore's own offline
+// persistence covers the data; this covers actually launching.
+let swWaiting = null;
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      // A newer build is sitting ready — offer it rather than swapping the
+      // page out from under someone mid-install.
+      const offer = worker => {
+        swWaiting = worker;
+        const el = document.getElementById('swUpdate');
+        if (el) el.style.display = 'flex';
+      };
+      if (reg.waiting) offer(reg.waiting);
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', () => {
+          if (nw.state === 'installed' && navigator.serviceWorker.controller) offer(nw);
+        });
+      });
+    }).catch(e => console.warn('Service worker registration failed:', e));
+
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloading) return; reloading = true; location.reload();
+    });
+  });
+}
+function applySwUpdate() {
+  if (swWaiting) swWaiting.postMessage('skipWaiting');
+  const el = document.getElementById('swUpdate'); if (el) el.style.display = 'none';
+}
+
+// Online/offline banner so it is never a mystery why something is not syncing.
+function updateNetBanner() {
+  const el = document.getElementById('netBanner'); if (!el) return;
+  el.style.display = navigator.onLine ? 'none' : 'flex';
+}
+window.addEventListener('online', () => { updateNetBanner(); showToast('📶', 'Back online — syncing'); });
+window.addEventListener('offline', () => { updateNetBanner(); showToast('📴', 'Offline — changes saved on this device'); });
 
 // ════════════════════════════════════════════════════════════
 // BOOT
