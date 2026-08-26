@@ -205,7 +205,7 @@
     .btn-pink  {background:#5A1A42;color:#FBC0E0;border-color:#E86AB0}.btn-pink:hover{background:#7A2458}
 
     /* ── Modals ── */
-    .modal-wrap{position:fixed;inset:0;background:rgba(0,0,0,.82);backdrop-filter:blur(6px);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px}
+    .modal-wrap{position:fixed;inset:0;background:rgba(0,0,0,.82);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px}
     .modal-box{background:#0C0E1A;border:1px solid #1E2840;border-radius:12px;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
 
     /* ── Scrollbars ── */
@@ -257,9 +257,17 @@
       /* Header: tighter, wraps cleanly, buttons stay tappable */
       header .hdr-sub{display:none}
       header > div{padding:8px 10px;gap:8px}
-      #searchInput{font-size:16px}
-      /* Prevent iOS auto-zoom on focus (needs ≥16px) */
-      input,select,textarea{font-size:16px}
+      /* iOS Safari zooms the whole page whenever a focused field renders below
+         16px, and you then have to pinch back out. These override the component
+         styles — and the inline ones on the header controls — on purpose:
+         slightly larger text beats fighting the zoom on every tap. */
+      input,select,textarea,
+      #searchInput,#statusFilter,
+      .cs-statsel,.cs-note,
+      .mat-f input,.mat-cost,.mat-hrs,.mat-note,.hv-contract,
+      .tl-addrow input,.tl-addrow select,
+      .b7-row input,.b7-row select,
+      .mat-entry input{font-size:16px!important}
       /* Overlay heads wrap instead of overflowing */
       .b7-head,.tl-head{flex-wrap:wrap;gap:8px;padding:12px 14px}
       .b7-body,.tl-body{padding:12px}
@@ -295,7 +303,7 @@
     #intakeBadge.has-items{display:flex}
     #intakePanel{position:fixed;top:0;right:-420px;width:400px;height:100vh;background:#0A0C16;border-left:1px solid rgba(196,162,106,0.22);z-index:45;overflow-y:auto;transition:right .25s cubic-bezier(.4,0,.2,1);padding:20px;display:flex;flex-direction:column;gap:12px;box-shadow:-10px 0 40px rgba(0,0,0,.6)}
     #intakePanel.open{right:0}
-    #intakeOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:44;backdrop-filter:blur(2px)}
+    #intakeOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:44;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
     .intake-card{background:#0E1120;border:1px solid #1E2840;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s}
     .intake-card.pending{border-color:rgba(196,162,106,0.4)}
 
@@ -1191,6 +1199,17 @@
 // ════════════════════════════════════════════════════════════
 // FIREBASE INIT
 // ════════════════════════════════════════════════════════════
+// Safari in Private Browsing throws on every localStorage write, which would
+// otherwise break saving outright rather than degrading. Returns false instead
+// so callers can warn rather than crash.
+function lsSet(key, value) {
+  try { localStorage.setItem(key, value); return true; }
+  catch (e) { console.warn('Local storage write blocked (' + key + '):', e.name); return false; }
+}
+function lsGet(key) {
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+
 let storage = null;
 let db = null;
 let auth = null;
@@ -1351,7 +1370,7 @@ async function init() {
           d.designPlans = d.designPlans.filter(p => isValidStorageUrl(p.url));
           DATA[doc.id] = d;
         });
-        localStorage.setItem('gota_hvac_v2', JSON.stringify(DATA));
+        lsSet('gota_hvac_v2', JSON.stringify(DATA));
         renderMap();
         updateStats();
         loadClubhouse();
@@ -1429,7 +1448,7 @@ function buildDefaults() {
 }
 
 function persist(unitId = selectedId) {
-  localStorage.setItem('gota_hvac_v2', JSON.stringify(DATA));
+  lsSet('gota_hvac_v2', JSON.stringify(DATA));
   if (!firestoreReady || !unitId) return;
   return db.collection('units').doc(String(unitId)).set(DATA[unitId])
     .catch(e => console.error('Firestore save error:', e));
@@ -1456,7 +1475,7 @@ function confirmReset() {
     DATA = {};
     selectedId = null;
     buildDefaults();
-    localStorage.setItem('gota_hvac_v2', JSON.stringify(DATA));
+    lsSet('gota_hvac_v2', JSON.stringify(DATA));
     if (firestoreReady) syncToFirestore();
     renderMap();
     updateStats();
@@ -3040,7 +3059,7 @@ async function loadB7Custom() {
     const remote = doc.exists && Array.isArray(doc.data().customItems) ? doc.data().customItems : [];
     const before = B7_CUSTOM.length;
     B7_CUSTOM = mergeById(B7_CUSTOM, remote, ['key']);
-    localStorage.setItem('gota_b7_construction', JSON.stringify(B7_CUSTOM));
+    lsSet('gota_b7_construction', JSON.stringify(B7_CUSTOM));
     // Anything local had that the cloud lacked goes straight back up, so a
     // write that never landed gets a second chance on the next page load.
     if (localIsAhead(B7_CUSTOM, remote, ['key'])) persistB7Custom();
@@ -3053,7 +3072,7 @@ async function loadB7Custom() {
 }
 
 function persistB7Custom() {
-  localStorage.setItem('gota_b7_construction', JSON.stringify(B7_CUSTOM));
+  lsSet('gota_b7_construction', JSON.stringify(B7_CUSTOM));
   if (!firestoreReady) return;
   db.collection('properties').doc('bldg7Construction').set({ customItems: B7_CUSTOM })
     .catch(e => {
@@ -3414,12 +3433,12 @@ async function loadB7Trades() {
       const merged = Object.assign({}, remote, B7_TRADES);
       Object.keys(remote).forEach(k => { if (!B7_TRADES[k]) merged[k] = remote[k]; });
       B7_TRADES = merged;
-      localStorage.setItem('gota_b7_trades', JSON.stringify(B7_TRADES));
+      lsSet('gota_b7_trades', JSON.stringify(B7_TRADES));
     }
   } catch(e) { console.warn('B7 trades load failed, using local cache:', e); }
 }
 function persistB7Trades() {
-  localStorage.setItem('gota_b7_trades', JSON.stringify(B7_TRADES));
+  lsSet('gota_b7_trades', JSON.stringify(B7_TRADES));
   if (!firestoreReady) return;
   db.collection('properties').doc('bldg7Trades').set({ roster: B7_TRADES })
     .catch(e => console.error('B7 trades save error:', e));
@@ -3654,7 +3673,7 @@ function tlPushBackup(prevJson) {
     if (list.length && list[list.length - 1].d === prevJson) return;   // unchanged
     list.push({ t: Date.now(), d: prevJson });
     while (list.length > 15) list.shift();
-    localStorage.setItem(TL_BAK, JSON.stringify(list));
+    lsSet(TL_BAK, JSON.stringify(list));
   } catch (e) { /* backups are best-effort; never block a save */ }
 }
 
@@ -3679,7 +3698,13 @@ function tlWriteLocal() {
     }
     const next = JSON.stringify(TASK_DATA);
     if (prev !== next) tlPushBackup(prev);
-    localStorage.setItem(TL_KEY, next);
+    // lsSet fails soft (Safari private browsing, full disk) — surface it here
+    // rather than letting a silent failure look like a successful save.
+    if (!lsSet(TL_KEY, next)) {
+      tlStatus('⚠ This device cannot save locally — export a backup now');
+      showToast('⚠️', 'Local storage unavailable — use Export');
+      return false;
+    }
     return true;
   } catch (e) {
     console.error('Local save failed:', e);
@@ -5288,7 +5313,7 @@ async function loadClubhouse() {
     const doc = await db.collection('properties').doc('clubhouse').get();
     if (doc.exists) {
       CLUBHOUSE = scrubClubhouse(doc.data());
-      localStorage.setItem('gota_clubhouse', JSON.stringify(CLUBHOUSE));
+      lsSet('gota_clubhouse', JSON.stringify(CLUBHOUSE));
     }
   } catch(e) { console.warn('Clubhouse load failed, using local cache:', e); }
 }
@@ -5296,7 +5321,7 @@ async function loadClubhouse() {
 function persistClubhouse() {
   const safe = scrubClubhouse(CLUBHOUSE);
   CLUBHOUSE = safe;
-  localStorage.setItem('gota_clubhouse', JSON.stringify(safe));
+  lsSet('gota_clubhouse', JSON.stringify(safe));
   if (!firestoreReady) return;
   db.collection('properties').doc('clubhouse').set(safe).catch(e => console.error('Clubhouse save error:', e));
 }
@@ -5424,7 +5449,7 @@ async function loadSitePhotos() {
     if (doc.exists && doc.data().photos) {
       const remote = doc.data().photos.filter(p => isValidStorageUrl(p.url));
       SITE_PHOTOS = mergeById(SITE_PHOTOS, remote, ['storagePath', 'url']);
-      localStorage.setItem('gota_site_photos', JSON.stringify(SITE_PHOTOS));
+      lsSet('gota_site_photos', JSON.stringify(SITE_PHOTOS));
     }
   } catch(e) { console.warn('Site photos load failed, using local cache:', e); }
 }
@@ -5432,7 +5457,7 @@ async function loadSitePhotos() {
 function persistSitePhotos() {
   const safe = SITE_PHOTOS.filter(p => isValidStorageUrl(p.url));
   SITE_PHOTOS = safe;
-  localStorage.setItem('gota_site_photos', JSON.stringify(safe));
+  lsSet('gota_site_photos', JSON.stringify(safe));
   if (!firestoreReady) return;
   db.collection('properties').doc('sitePhotos').set({ photos: safe }).catch(e => console.error('Site photos save error:', e));
 }
@@ -5744,7 +5769,7 @@ function promptApiKey() {
   const key = prompt('Paste your Anthropic API key (sk-ant-…):');
   if (key && key.trim().startsWith('sk-')) {
     ANTHROPIC_API_KEY = key.trim();
-    localStorage.setItem('anthropic_key', ANTHROPIC_API_KEY);
+    lsSet('anthropic_key', ANTHROPIC_API_KEY);
     updateIndexStatus();
     showToast('🔑', 'API key saved — ready to index photos');
   } else if (key !== null) {
@@ -5857,6 +5882,7 @@ document.addEventListener('keydown', e => {
 let activeRecording = false;
 let recStream = null;
 let recMediaRecorder = null;
+let recMimeType = '';   // what the browser actually recorded (Safari = mp4)
 let recChunks = [];
 let recSpeechRec = null;
 let recTranscript = '';
@@ -5962,9 +5988,13 @@ async function startRecording() {
     recStartTime = Date.now();
     recSavedLabel = document.getElementById('recLabel')?.value?.trim() || '';
 
-    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
-                   : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+    // Safari (iPhone/iPad) cannot record webm — it produces MP4/AAC. Probe in
+    // order and let Safari land on mp4 rather than falling through to a
+    // browser default we then mislabel.
+    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/mp4;codecs=mp4a.40.2']
+      .find(t => { try { return MediaRecorder.isTypeSupported(t); } catch (e) { return false; } }) || '';
     recMediaRecorder = new MediaRecorder(recStream, mimeType ? { mimeType } : {});
+    recMimeType = recMediaRecorder.mimeType || mimeType || '';
     recMediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) recChunks.push(e.data); };
     recMediaRecorder.start(5000);
 
@@ -6023,7 +6053,7 @@ function stopRecording() {
 async function saveRecording() {
   if (!selectedId) return;
   const u = DATA[selectedId];
-  const mimeType = recMediaRecorder?.mimeType || 'audio/webm';
+  const mimeType = recMediaRecorder?.mimeType || recMimeType || 'audio/mp4';
   const blob = new Blob(recChunks, { type: mimeType });
   const durationSecs = recStartTime ? Math.round((Date.now() - recStartTime) / 1000) : 0;
   const timestamp = Date.now();
@@ -6038,7 +6068,13 @@ async function saveRecording() {
   if (firebaseReady) {
     try {
       showToast('⬆️', 'Saving recording…');
-      const ext = mimeType.includes('webm') ? 'webm' : 'ogg';
+      // Name the file after what it actually contains. Safari records MP4, so
+      // the old webm-or-ogg guess saved iPhone recordings as .ogg and broke
+      // playback.
+      const ext = mimeType.includes('webm') ? 'webm'
+                : mimeType.includes('mp4') || mimeType.includes('aac') || mimeType.includes('mpeg') ? 'm4a'
+                : mimeType.includes('ogg') ? 'ogg'
+                : mimeType.includes('wav') ? 'wav' : 'audio';
       const path = `units/${selectedId}/recordings/${timestamp}.${ext}`;
       const ref = firebase.storage().ref(path);
       await ref.put(blob);
@@ -6276,7 +6312,7 @@ function switchDesignTab(tab) {
 function persistDesignPlans() {
   const safe = DESIGN_PLANS.filter(p => isValidStorageUrl(p.url));
   DESIGN_PLANS = safe;
-  localStorage.setItem('gota_design_plans', JSON.stringify(safe));
+  lsSet('gota_design_plans', JSON.stringify(safe));
   if (!firestoreReady) return;
   db.collection('properties').doc('designPlans').set({ plans: safe })
     .catch(e => console.error('Design plans save error:', e));
@@ -6291,7 +6327,7 @@ async function loadDesignPlans() {
       if (doc.exists && doc.data().plans) {
         const remote = doc.data().plans.filter(p => isValidStorageUrl(p.url));
         DESIGN_PLANS = mergeById(DESIGN_PLANS, remote, ['storagePath', 'path', 'url']);
-        localStorage.setItem('gota_design_plans', JSON.stringify(DESIGN_PLANS));
+        lsSet('gota_design_plans', JSON.stringify(DESIGN_PLANS));
       }
     } catch(e) { console.warn('Design plans load failed:', e); }
   }
@@ -6399,7 +6435,7 @@ async function runDesignAnalysis() {
   if (!ANTHROPIC_API_KEY) {
     const key = prompt('Enter your Anthropic API key (sk-ant-…):');
     if (!key || !key.trim().startsWith('sk-')) { showToast('❌', 'Valid API key required'); return; }
-    ANTHROPIC_API_KEY = key.trim(); localStorage.setItem('anthropic_key', ANTHROPIC_API_KEY);
+    ANTHROPIC_API_KEY = key.trim(); lsSet('anthropic_key', ANTHROPIC_API_KEY);
   }
   const plan = DESIGN_PLANS[+idx];
   if (!plan) return;
@@ -6715,7 +6751,7 @@ async function analyzeUnitDesign(idx, btn) {
   if (!ANTHROPIC_API_KEY) {
     const key = prompt('Enter your Anthropic API key (sk-ant-…):');
     if (!key || !key.trim().startsWith('sk-')) { showToast('❌', 'Valid API key required'); return; }
-    ANTHROPIC_API_KEY = key.trim(); localStorage.setItem('anthropic_key', ANTHROPIC_API_KEY);
+    ANTHROPIC_API_KEY = key.trim(); lsSet('anthropic_key', ANTHROPIC_API_KEY);
   }
   const resultDiv = document.getElementById('unitDesignAnalysis_' + idx);
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Analyzing…'; }
