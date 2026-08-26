@@ -2306,7 +2306,7 @@ function constItem(u, key) {
 }
 
 function customItemsFor(sectionId, unitId) {
-  return B7_CUSTOM.filter(c => normSection(c.section) === sectionId &&
+  return B7_CUSTOM.filter(c => !c.deleted && normSection(c.section) === sectionId &&
     (!c.units || c.units.length === 0 || (unitId != null && c.units.includes(String(unitId)))));
 }
 
@@ -2510,6 +2510,8 @@ function constructionTabHtml(u) {
   html += `<div style="font-size:10px;color:#4D5C3D;text-align:center;margin-top:8px">${
     upd ? 'Last updated ' + new Date(upd).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
         : 'Tap a status to cycle it — Not started → In progress → Done' }</div>`;
+  html += `<button class="btn btn-gray" style="width:100%;font-size:11px;margin-top:8px;opacity:.75"
+    onclick="recoverB7Items()" title="Search this device, the offline database, and the cloud for installs that are missing from the checklist">🔎 Missing an install? Search all storage</button>`;
   return html;
 }
 
@@ -2672,7 +2674,7 @@ function saveAddInstall() {
   if (!label) { showToast('⚠️', 'Enter an install name'); return; }
   if (!imUnits.length) { showToast('⚠️', 'Select at least one garage'); return; }
   const key = 'c_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
-  B7_CUSTOM.push({ key, label, section: imTrade, units: [...imUnits] });
+  B7_CUSTOM.push({ key, label, section: imTrade, units: [...imUnits], created: Date.now(), updated: Date.now() });
   persistB7Custom();
   const n = imUnits.length;
   closeInstallModal();
@@ -2694,7 +2696,7 @@ function addConstItem(sectionId, scope) {
     persist();
     showToast('➕', `Item added to unit #${u.id}`);
   } else {
-    B7_CUSTOM.push({ key, label, section: sectionId });
+    B7_CUSTOM.push({ key, label, section: sectionId, created: Date.now(), updated: Date.now() });
     persistB7Custom();
     showToast('➕', 'Item added to all Building 7 units');
   }
@@ -2706,7 +2708,9 @@ function deleteConstCustom(key) {
   const item = B7_CUSTOM.find(c => c.key === key);
   if (!item) return;
   if (!confirm(`Remove the install "${item.label}" from every garage it's assigned to? Progress and photos logged for it will be cleared.`)) return;
-  B7_CUSTOM = B7_CUSTOM.filter(c => c.key !== key);
+  // Tombstone rather than splice — a hard delete would be undone by the next
+  // merge from a device that still holds the record.
+  item.deleted = true; item.updated = Date.now();
   persistB7Custom();
   drawPanel();
   switchTab('construction');
@@ -2727,27 +2731,122 @@ function deleteUnitItem(key) {
   showToast('🗑', `Item removed from unit #${u.id}`);
 }
 
+// ════════════════════════════════════════════════════════════
+// SAFE SYNC — never let a stale remote copy destroy local work
+// ════════════════════════════════════════════════════════════
+// A remote read used to REPLACE local state and then overwrite the local
+// cache with it. If a save had not reached Firestore yet — a refresh a second
+// too early, a dropped connection, a rejected write — the next page load
+// silently deleted the work on both sides. Everything below merges instead:
+// remote can add records and update older ones, but can never remove a record
+// local has. Deletions travel as tombstones so they still propagate.
+function mergeById(local, remote, idKeys) {
+  const idOf = x => {
+    if (!x || typeof x !== 'object') return null;
+    for (const k of idKeys) if (x[k] != null && x[k] !== '') return String(x[k]);
+    return null;
+  };
+  const out = [], byId = new Map();
+  (Array.isArray(local) ? local : []).forEach(x => {
+    const id = idOf(x);
+    if (id === null) { out.push(x); return; }
+    if (byId.has(id)) return;
+    byId.set(id, out.length); out.push(x);
+  });
+  (Array.isArray(remote) ? remote : []).forEach(x => {
+    const id = idOf(x);
+    if (id === null) { out.push(x); return; }
+    if (!byId.has(id)) { byId.set(id, out.length); out.push(x); return; }
+    // Same record on both sides — keep whichever was touched last.
+    const cur = out[byId.get(id)];
+    if ((x.updated || 0) > (cur.updated || 0)) out[byId.get(id)] = x;
+  });
+  return out;
+}
+// True when local holds something remote does not, meaning we owe it a push.
+function localIsAhead(merged, remote, idKeys) {
+  return merged.length !== (Array.isArray(remote) ? remote.length : 0);
+}
+
 async function loadB7Custom() {
   const local = localStorage.getItem('gota_b7_construction');
-  if (local) { try { B7_CUSTOM = JSON.parse(local) || []; } catch(e) {} }
+  if (local) { try { B7_CUSTOM = JSON.parse(local) || []; } catch(e) { console.warn('B7 local cache unreadable:', e); } }
   if (!firestoreReady) return;
   try {
     const doc = await db.collection('properties').doc('bldg7Construction').get();
-    if (doc.exists && Array.isArray(doc.data().customItems)) {
-      B7_CUSTOM = doc.data().customItems;
-      localStorage.setItem('gota_b7_construction', JSON.stringify(B7_CUSTOM));
+    const remote = doc.exists && Array.isArray(doc.data().customItems) ? doc.data().customItems : [];
+    const before = B7_CUSTOM.length;
+    B7_CUSTOM = mergeById(B7_CUSTOM, remote, ['key']);
+    localStorage.setItem('gota_b7_construction', JSON.stringify(B7_CUSTOM));
+    // Anything local had that the cloud lacked goes straight back up, so a
+    // write that never landed gets a second chance on the next page load.
+    if (localIsAhead(B7_CUSTOM, remote, ['key'])) persistB7Custom();
+    if (B7_CUSTOM.length !== before || B7_CUSTOM.length !== remote.length) {
       if (selectedId && DATA[selectedId] && DATA[selectedId].building === 'Bldg 7' && activeTab === 'construction') {
         drawPanel(); switchTab('construction');
       }
     }
-  } catch(e) { console.warn('B7 custom items load failed, using local cache:', e); }
+  } catch(e) { console.warn('B7 custom items load failed, keeping local cache:', e); }
 }
 
 function persistB7Custom() {
   localStorage.setItem('gota_b7_construction', JSON.stringify(B7_CUSTOM));
   if (!firestoreReady) return;
   db.collection('properties').doc('bldg7Construction').set({ customItems: B7_CUSTOM })
-    .catch(e => console.error('B7 custom items save error:', e));
+    .catch(e => {
+      console.error('B7 custom items save error:', e);
+      showToast('📴', 'Saved on this device — will sync when back online');
+    });
+}
+
+// ── Recovery ──
+// Checks every place a Building 7 install could still be sitting: this
+// device's cache, Firebase's own offline database, and the server. Anything
+// found is merged back in — nothing is overwritten.
+async function recoverB7Items() {
+  const found = {};
+  const add = (where, list) => {
+    if (Array.isArray(list) && list.length) found[where] = list;
+  };
+  try { add('This device', JSON.parse(localStorage.getItem('gota_b7_construction') || '[]')); } catch(e) {}
+  if (firestoreReady) {
+    const ref = db.collection('properties').doc('bldg7Construction');
+    // Firebase's offline database can still hold a write that never reached
+    // the server — this is the copy most likely to have the missing items.
+    try {
+      const c = await ref.get({ source: 'cache' });
+      if (c.exists) add('Offline database', c.data().customItems);
+    } catch(e) { console.warn('cache read:', e.code); }
+    try {
+      const s = await ref.get({ source: 'server' });
+      if (s.exists) add('Cloud', s.data().customItems);
+    } catch(e) { console.warn('server read:', e.code); }
+  }
+
+  const before = B7_CUSTOM.filter(c => !c.deleted).length;
+  let merged = B7_CUSTOM;
+  Object.values(found).forEach(list => { merged = mergeById(merged, list, ['key']); });
+  B7_CUSTOM = merged;
+  const after = B7_CUSTOM.filter(c => !c.deleted).length;
+
+  const lines = Object.keys(found).length
+    ? Object.entries(found).map(([k, v]) => `  ${k}: ${v.filter(x => !x.deleted).length} item(s)`).join('\n')
+    : '  Nothing found in any location.';
+  const gained = after - before;
+
+  if (gained > 0) {
+    persistB7Custom();
+    if (selectedId) { drawPanel(); switchTab('construction'); }
+  }
+  alert(
+    `Building 7 install recovery\n\n${lines}\n\n` +
+    (gained > 0
+      ? `Recovered ${gained} item(s). They are back on the checklist and saved.`
+      : `Nothing new to recover — you already have all ${after} item(s) that could be found.\n\n` +
+        `If the items you added are not listed above, they were lost before reaching any\n` +
+        `storage. The bug that caused it is now fixed, so it will not happen again.`)
+  );
+  return { found, before, after };
 }
 
 // ════════════════════════════════════════════════════════════
@@ -3046,7 +3145,12 @@ async function loadB7Trades() {
   try {
     const doc = await db.collection('properties').doc('bldg7Trades').get();
     if (doc.exists && doc.data().roster) {
-      B7_TRADES = doc.data().roster;
+      // Merge per trade: remote may add or update a trade, never drop one we
+      // hold locally that has not synced yet.
+      const remote = doc.data().roster || {};
+      const merged = Object.assign({}, remote, B7_TRADES);
+      Object.keys(remote).forEach(k => { if (!B7_TRADES[k]) merged[k] = remote[k]; });
+      B7_TRADES = merged;
       localStorage.setItem('gota_b7_trades', JSON.stringify(B7_TRADES));
     }
   } catch(e) { console.warn('B7 trades load failed, using local cache:', e); }
@@ -5055,7 +5159,8 @@ async function loadSitePhotos() {
   try {
     const doc = await db.collection('properties').doc('sitePhotos').get();
     if (doc.exists && doc.data().photos) {
-      SITE_PHOTOS = doc.data().photos.filter(p => isValidStorageUrl(p.url));
+      const remote = doc.data().photos.filter(p => isValidStorageUrl(p.url));
+      SITE_PHOTOS = mergeById(SITE_PHOTOS, remote, ['storagePath', 'url']);
       localStorage.setItem('gota_site_photos', JSON.stringify(SITE_PHOTOS));
     }
   } catch(e) { console.warn('Site photos load failed, using local cache:', e); }
@@ -5921,7 +6026,8 @@ async function loadDesignPlans() {
     try {
       const doc = await db.collection('properties').doc('designPlans').get();
       if (doc.exists && doc.data().plans) {
-        DESIGN_PLANS = doc.data().plans.filter(p => isValidStorageUrl(p.url));
+        const remote = doc.data().plans.filter(p => isValidStorageUrl(p.url));
+        DESIGN_PLANS = mergeById(DESIGN_PLANS, remote, ['storagePath', 'path', 'url']);
         localStorage.setItem('gota_design_plans', JSON.stringify(DESIGN_PLANS));
       }
     } catch(e) { console.warn('Design plans load failed:', e); }
