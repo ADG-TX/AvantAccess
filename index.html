@@ -105,7 +105,21 @@
     .mat-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:9px;font-weight:800;
               color:#5F7A8A;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px}
     .mat-sum{color:#7FD8F0;font-weight:800;letter-spacing:0;font-size:11px;font-variant-numeric:tabular-nums}
-    .mat-entry{display:grid;grid-template-columns:110px 92px minmax(0,1fr);gap:6px;align-items:end}
+    .mat-entry{display:grid;grid-template-columns:104px 128px 84px minmax(0,1fr);gap:6px;align-items:end}
+    .mat-f select{background:#07090F;border:1px solid #16283A;color:#C8D0E0;border-radius:5px;
+                  padding:6px 8px;font-size:12px;width:100%;min-width:0}
+    .mat-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+    .tmr,.two-p{background:#0A1620;border:1px solid #2A5878;color:#7FD8F0;border-radius:5px;
+                padding:6px 11px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
+    .tmr:hover,.two-p:hover{border-color:#4FB8D8;background:#0E2030}
+    .tmr-on{background:#3A0E08;border-color:#C0392B;color:#F5A5A0;animation:tmrPulse 1.6s ease-in-out infinite}
+    @keyframes tmrPulse{0%,100%{opacity:1}50%{opacity:.62}}
+    .two-p.on{background:#241A38;border-color:#6A4C9C;color:#C9AEEA}
+    /* Waiting-on-someone log */
+    .blk{background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:10px 12px;margin-bottom:12px}
+    .blk-open{background:#241A08;border-color:#E08800}
+    .blk-row{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:3px 0;color:#B8C9A0;flex-wrap:wrap}
+    @media(prefers-reduced-motion:reduce){.tmr-on{animation:none}}
     .mat-f{display:flex;flex-direction:column;gap:3px;min-width:0}
     .mat-f>span{font-size:9px;font-weight:700;color:#5F7A8A;letter-spacing:.05em;text-transform:uppercase}
     .mat-f input{background:#07090F;border:1px solid #16283A;color:#C8D0E0;border-radius:5px;
@@ -138,6 +152,7 @@
     .hv-jump:hover{border-color:#4FB8D8}
     @media(max-width:560px){
       .mat-entry{grid-template-columns:1fr 1fr}
+      .mat-actions .tmr,.mat-actions .two-p{flex:1 1 auto;min-height:34px}
       .mat-f-wide{grid-column:1/-1}
     }
 
@@ -2442,9 +2457,129 @@ function constItem(u, key) {
 // ════════════════════════════════════════════════════════════
 // MATERIALS & LABOR — what each task consumed, and what it cost
 // ════════════════════════════════════════════════════════════
+// Where the material actually came from. 95% of spend is these four, so they
+// are one tap rather than free text — and it lines up with how the expense
+// gets categorised in QuickBooks later.
+const MAT_VENDORS = [
+  'Standard Supply',       // copper, insulation
+  'Home Depot',            // consumables, misc parts, tools
+  'Winston Water Cooler',  // flashing for the copper penetration
+  'Johnstone Supply',      // electrical disconnect
+  'Other',
+];
+
 // Material spend is entered by hand, per task, per garage — the exact figure
 // off the receipt, not a quantity-times-price estimate.
 function itemMaterialTotal(d) { return Number(d.materialCost) || 0; }
+
+// ── Live timer ──
+// Typing hours after the fact means guessing. One timer runs at a time; the
+// start time is persisted so it survives a reload, a locked phone, or the app
+// being closed mid-task.
+function timerElapsedHrs(d) {
+  if (!d.timerStart) return 0;
+  return (Date.now() - d.timerStart) / 3600000;
+}
+function findRunningTimer() {
+  for (const id of B7_UNIT_IDS) {
+    const u = DATA[id]; if (!u || !u.construction) continue;
+    for (const key of Object.keys(u.construction)) {
+      const it = u.construction[key];
+      if (it && it.timerStart) return { unitId: id, key, item: it };
+    }
+  }
+  return null;
+}
+function startConstTimer(key) {
+  const u = DATA[selectedId]; if (!u) return;
+  const running = findRunningTimer();
+  if (running && !(running.unitId === selectedId && running.key === key)) {
+    stopConstTimer(running.key, running.unitId, true);
+    showToast('⏱', 'Stopped the timer already running on #' + running.unitId);
+  }
+  constItem(u, key).timerStart = Date.now();
+  constTouch(u); persist(); drawPanel(); switchTab(activeTab);
+  showToast('▶️', 'Timer started');
+}
+function stopConstTimer(key, unitId, quiet) {
+  const u = DATA[unitId || selectedId]; if (!u) return;
+  const d = constItem(u, key);
+  if (!d.timerStart) return;
+  const add = timerElapsedHrs(d);
+  d.hours = Math.round(((Number(d.hours) || 0) + add) * 100) / 100;
+  d.timerStart = null;
+  constTouch(u); persist();
+  if (!quiet) {
+    drawPanel(); switchTab(activeTab);
+    showToast('⏹', 'Logged ' + (Math.round(add * 100) / 100) + ' hr');
+  }
+}
+function toggleTwoPerson(key) {
+  const u = DATA[selectedId]; if (!u) return;
+  const d = constItem(u, key);
+  d.twoPerson = !d.twoPerson;
+  constTouch(u); persist(); drawPanel(); switchTab(activeTab);
+  showToast(d.twoPerson ? '👥' : '👤', d.twoPerson ? 'Marked as a two-person task' : 'Two-person flag removed');
+}
+
+// ── Waiting on someone else ──
+// The real variable on a garage is not the work, it is being blocked. Logging
+// it turns "it took longer" into a dated record of who held things up.
+function hvacBlocks(u) { if (!Array.isArray(u.hvacBlocks)) u.hvacBlocks = []; return u.hvacBlocks; }
+function openBlock(u) { return hvacBlocks(u).find(b => !b.end) || null; }
+function blockDays(b) {
+  const end = b.end ? new Date(b.end) : new Date();
+  const start = new Date(b.start);
+  return Math.max(0, Math.round((end - start) / 86400000));
+}
+function startBlock() {
+  const u = DATA[selectedId]; if (!u) return;
+  if (openBlock(u)) { showToast('⚠️', 'Already logged as waiting'); return; }
+  const who = (prompt('Waiting on who or what?\n(e.g. electrical not finished, no second pair of hands, drywall crew still in)') || '').trim();
+  if (!who) return;
+  hvacBlocks(u).push({ id: 'b' + Date.now(), who, start: toISO(new Date()), end: '' });
+  constTouch(u); persist(); drawPanel(); switchTab('hvacjob');
+  showToast('⏸', 'Logged as waiting — clock is running');
+}
+function endBlock() {
+  const u = DATA[selectedId]; if (!u) return;
+  const b = openBlock(u); if (!b) return;
+  b.end = toISO(new Date());
+  constTouch(u); persist(); drawPanel(); switchTab('hvacjob');
+  showToast('▶️', 'Cleared after ' + blockDays(b) + ' day(s)');
+}
+function deleteBlock(id) {
+  const u = DATA[selectedId]; if (!u) return;
+  u.hvacBlocks = hvacBlocks(u).filter(b => b.id !== id);
+  constTouch(u); persist(); drawPanel(); switchTab('hvacjob');
+}
+// Total days lost to waiting across Building 7 — the number worth showing Tim.
+function buildingBlockDays() {
+  let days = 0, open = 0, byWho = {};
+  B7_UNIT_IDS.forEach(id => {
+    const u = DATA[id]; if (!u || !Array.isArray(u.hvacBlocks)) return;
+    u.hvacBlocks.forEach(b => {
+      const d = blockDays(b);
+      days += d; if (!b.end) open++;
+      const k = (b.who || 'Unknown').trim();
+      byWho[k] = (byWho[k] || 0) + d;
+    });
+  });
+  return { days, open, byWho };
+}
+// Every unfinished two-person task across the building, so they can be batched
+// into one visit with a helper instead of stalling one garage at a time.
+function twoPersonQueue() {
+  const out = [];
+  B7_UNIT_IDS.forEach(id => {
+    const u = DATA[id]; if (!u) return;
+    tradeItems(u, 'hvac').forEach(it => {
+      const d = constItem(u, it.key);
+      if (d.twoPerson && d.status !== 'finished') out.push({ unitId: id, label: it.label, status: d.status });
+    });
+  });
+  return out;
+}
 function money(n) { return '$' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function money0(n) { return '$' + Math.round(Number(n) || 0).toLocaleString('en-US'); }
 
@@ -2485,6 +2620,26 @@ function setConstMaterialNote(key, value) {
   constItem(u, key).materialNote = String(value || '');
   constTouch(u); persist();
 }
+function setConstVendor(key, value) {
+  const u = DATA[selectedId]; if (!u) return;
+  constItem(u, key).vendor = String(value || '');
+  constTouch(u); persist(); drawPanel(); switchTab(activeTab);
+}
+// Spend split by supplier, for reconciling against QuickBooks.
+function vendorTotals(tradeId) {
+  const out = {};
+  B7_UNIT_IDS.forEach(id => {
+    const u = DATA[id]; if (!u) return;
+    tradeItems(u, tradeId).forEach(it => {
+      const d = constItem(u, it.key);
+      const c = Number(d.materialCost) || 0;
+      if (!c) return;
+      const v = d.vendor || 'Unassigned';
+      out[v] = (out[v] || 0) + c;
+    });
+  });
+  return out;
+}
 function setConstHours(key, value) {
   const u = DATA[selectedId]; if (!u) return;
   constItem(u, key).hours = Number(String(value).replace(/[^0-9.]/g, '')) || 0;
@@ -2502,6 +2657,8 @@ function matBlockHtml(u, it) {
   const d = constItem(u, it.key);
   const cost = Number(d.materialCost) || 0;
   const hrs = Number(d.hours) || 0;
+  const running = !!d.timerStart;
+  const live = running ? Math.round(timerElapsedHrs(d) * 100) / 100 : 0;
   return `<div class="mat-wrap" data-mat-key="${it.key}">
     <div class="mat-head">
       <span>Material &amp; time on this garage</span>
@@ -2514,6 +2671,13 @@ function matBlockHtml(u, it) {
           onchange="setConstMaterialCost('${it.key}',this.value)">
       </label>
       <label class="mat-f">
+        <span>Bought at</span>
+        <select class="mat-vendor" onchange="setConstVendor('${it.key}',this.value)">
+          <option value="">—</option>
+          ${MAT_VENDORS.map(v => `<option value="${escAttr(v)}" ${v === (d.vendor || '') ? 'selected' : ''}>${escHtml(v)}</option>`).join('')}
+        </select>
+      </label>
+      <label class="mat-f">
         <span>Time (hrs)</span>
         <input class="mat-hrs" value="${escAttr(hrs || '')}" placeholder="0" inputmode="decimal"
           onchange="setConstHours('${it.key}',this.value)">
@@ -2523,6 +2687,14 @@ function matBlockHtml(u, it) {
         <input class="mat-note" value="${escAttr(d.materialNote || '')}" placeholder="optional — line set, whip, pump…"
           onchange="setConstMaterialNote('${it.key}',this.value)">
       </label>
+    </div>
+    <div class="mat-actions">
+      ${running
+        ? `<button class="tmr tmr-on" onclick="stopConstTimer('${it.key}')">⏹ Stop · ${live} hr running</button>`
+        : `<button class="tmr" onclick="startConstTimer('${it.key}')">▶️ Start timer</button>`}
+      <button class="two-p ${d.twoPerson ? 'on' : ''}" onclick="toggleTwoPerson('${it.key}')"
+        title="Flag tasks that need a second pair of hands so they can be batched into one visit">
+        ${d.twoPerson ? '👥 Needs 2' : '👤 1 person'}</button>
     </div>
   </div>`;
 }
@@ -2718,6 +2890,28 @@ function hvacJobTabHtml(u) {
         : `Enter what you actually spent under each task below and this totals it.` }</div>
   </div>`;
 
+  // ── Waiting on someone else ──
+  const blocks = hvacBlocks(u);
+  const ob = openBlock(u);
+  const waited = blocks.reduce((s, b) => s + blockDays(b), 0);
+  h += `<div class="blk ${ob ? 'blk-open' : ''}">
+    <div class="hv-eq-head" style="border:none;padding-bottom:6px;margin-bottom:6px">
+      <span>${ob ? '⏸ Waiting now' : '⏱ Delays on this garage'}</span>
+      ${ob ? `<button class="btn btn-green" style="font-size:10px;padding:4px 10px" onclick="endBlock()">▶️ I can start</button>`
+           : `<button class="btn btn-amber" style="font-size:10px;padding:4px 10px" onclick="startBlock()">⏸ Log a delay</button>`}
+    </div>
+    ${ob ? `<div style="font-size:13px;color:#F5C840;font-weight:700;margin-bottom:6px">
+              ${escHtml(ob.who)} · ${blockDays(ob)} day${blockDays(ob) === 1 ? '' : 's'} and counting</div>` : ''}
+    ${blocks.filter(b => b.end).length
+      ? blocks.filter(b => b.end).map(b => `<div class="blk-row">
+          <span>${escHtml(b.who)}</span>
+          <span>${fmtDate(b.start)} → ${fmtDate(b.end)} · <strong>${blockDays(b)}d</strong>
+          <button class="tl-del" style="font-size:11px" onclick="deleteBlock('${b.id}')" title="Remove">✕</button></span>
+        </div>`).join('')
+      : (ob ? '' : `<div style="font-size:12px;color:#4D5C3D">No delays logged. Tap when something stops you starting — it is the number worth having later.</div>`)}
+    ${waited ? `<div style="font-size:11px;color:#8898B0;margin-top:8px">${waited} day${waited === 1 ? '' : 's'} lost on this garage so far.</div>` : ''}
+  </div>`;
+
   // ── Progress ──
   h += `<div class="cs-progress-wrap">
       <div style="display:flex;justify-content:space-between;align-items:center">
@@ -2768,6 +2962,42 @@ function hvacJobTabHtml(u) {
         <div class="hv-cell"><span class="hv-k">Avg hrs</span><span class="hv-v">${b.garages ? Math.round(avgHrs * 10) / 10 : '—'}</span></div>
       </div>
     </div>`;
+
+  // ── Where the money went, and what is waiting on a helper ──
+  const vt = vendorTotals('hvac');
+  const vendors = Object.entries(vt).sort((a, b) => b[1] - a[1]);
+  if (vendors.length) {
+    h += `<div class="hv-roll" style="margin-top:10px">
+      <div class="hv-eq-head" style="border:none;padding-bottom:6px">Spend by supplier · Building 7</div>
+      ${vendors.map(([v, amt]) => `<div class="hv-eq-row"><span>${escHtml(v)}</span><span>${money(amt)}</span></div>`).join('')}
+    </div>`;
+  }
+
+  const queue = twoPersonQueue();
+  if (queue.length) {
+    const byUnit = {};
+    queue.forEach(q => { (byUnit[q.unitId] = byUnit[q.unitId] || []).push(q.label); });
+    h += `<div class="hv-roll" style="margin-top:10px;border-color:#6A4C9C">
+      <div class="hv-eq-head" style="border:none;padding-bottom:6px;color:#C9AEEA">
+        👥 Needs a second pair of hands · ${queue.length} task${queue.length === 1 ? '' : 's'}</div>
+      ${Object.entries(byUnit).map(([id, labels]) => `<div class="hv-eq-row">
+        <span style="cursor:pointer;color:#90C8F0" onclick="openUnitFromTask('${id}')">#${escHtml(id)}</span>
+        <span>${labels.map(escHtml).join(', ')}</span></div>`).join('')}
+      <div style="font-size:11px;color:#8898B0;margin-top:8px">Batch these into one visit with your partner instead of stalling a garage at a time.</div>
+    </div>`;
+  }
+
+  const bb = buildingBlockDays();
+  if (bb.days) {
+    const who = Object.entries(bb.byWho).sort((a, b) => b[1] - a[1]);
+    h += `<div class="hv-roll" style="margin-top:10px;border-color:#E08800">
+      <div class="hv-eq-head" style="border:none;padding-bottom:6px;color:#F5C840">
+        ⏱ Days lost to delays · Building 7${bb.open ? ` · ${bb.open} open now` : ''}</div>
+      ${who.map(([w, d]) => `<div class="hv-eq-row"><span>${escHtml(w)}</span><span>${d} day${d === 1 ? '' : 's'}</span></div>`).join('')}
+      <div class="hv-eq-row" style="border-top:1px solid #1C2D16;margin-top:6px;padding-top:6px">
+        <span style="font-weight:700">Total</span><span style="font-weight:700">${bb.days} days</span></div>
+    </div>`;
+  }
 
   h += `<button class="btn btn-gray" style="width:100%;font-size:11px;margin-top:8px;opacity:.75"
     onclick="recoverB7Items()" title="Search this device, the offline database, and the cloud for tasks missing from the checklist">🔎 Missing a task? Search all storage</button>`;
