@@ -1405,15 +1405,46 @@ let ANTHROPIC_API_KEY = localStorage.getItem('anthropic_key') || '';
 // ════════════════════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════════════════════
+// Per-unit last-write-wins. A garage is edited by one person at a time, so
+// the whole record can be compared on its stamp — but a unit the cloud has
+// never seen must survive, and a local edit newer than the cloud copy must
+// win rather than being replaced by it.
+function mergeUnits(local, remote) {
+  const out = {};
+  const ids = new Set(Object.keys(local || {}).concat(Object.keys(remote || {})));
+  ids.forEach(id => {
+    const l = (local || {})[id], r = (remote || {})[id];
+    if (!l) { out[id] = r; return; }
+    if (!r) { out[id] = l; return; }
+    out[id] = (Number(l._updated) || 0) > (Number(r._updated) || 0) ? l : r;
+  });
+  return out;
+}
+// Units this device has edited more recently than the cloud knows about.
+function unitsAheadOfCloud(merged, remote) {
+  return Object.keys(merged).filter(id => {
+    const r = (remote || {})[id];
+    return !r || (Number(merged[id]._updated) || 0) > (Number(r._updated) || 0);
+  });
+}
+
 async function init() {
   // Show loading hint in stats bar
   document.getElementById('statTotal').textContent = '…';
+
+  // Local first, always — this is the copy that holds anything not yet synced.
+  const saved = lsGet('gota_hvac_v2');
+  if (saved) {
+    try { DATA = JSON.parse(saved) || {}; }
+    catch (e) { console.warn('Local data corrupt, rebuilding defaults:', e); DATA = {}; }
+  }
+  if (!Object.keys(DATA).length) buildDefaults();
 
   if (firestoreReady) {
     try {
       const snapshot = await db.collection('units').get();
       if (!snapshot.empty) {
-        DATA = {};
+        const remote = {};
         snapshot.forEach(doc => {
           const d = doc.data();
           if (!d.photos) d.photos = [];
@@ -1438,37 +1469,41 @@ async function init() {
           if (!d.recordings) d.recordings = [];
           if (!d.designPlans) d.designPlans = [];
           d.designPlans = d.designPlans.filter(p => isValidStorageUrl(p.url));
-          DATA[doc.id] = d;
+          remote[doc.id] = d;
         });
+        // Merge, never replace. Replacing is what silently deleted a garage's
+        // work whenever a save had not reached the cloud before the next load.
+        DATA = mergeUnits(DATA, remote);
+        const ahead = unitsAheadOfCloud(DATA, remote);
         lsSet('gota_hvac_v2', JSON.stringify(DATA));
-        renderMap();
-        updateStats();
-        loadClubhouse();
-        loadSitePhotos();
-        return;
+        // Anything this device holds that the cloud is missing or behind on
+        // goes straight back up, so a write that never landed gets retried.
+        if (ahead.length && firestoreReady) {
+          ahead.forEach(id => {
+            db.collection('units').doc(String(id)).set(DATA[id])
+              .catch(e => console.warn('Re-sync of unit ' + id + ' failed:', e.code));
+          });
+          console.info('Re-synced ' + ahead.length + ' unit(s) the cloud was behind on.');
+        }
       }
     } catch(e) {
-      console.warn('Firestore load failed, using local fallback:', e);
+      console.warn('Firestore load failed, using local copy:', e);
     }
   }
 
-  // Fallback: localStorage or fresh defaults
-  const saved = localStorage.getItem('gota_hvac_v2');
-  if (saved) {
-    try { DATA = JSON.parse(saved); } catch(e) { console.warn('Local data corrupt, rebuilding defaults:', e); buildDefaults(); return; }
-    Object.values(DATA).forEach(u => {
-      if (!u.photos) u.photos = [];
-      // Strip any blob URLs that survived from a previous bad session
-      u.photos = u.photos.filter(p => isValidStorageUrl(p.url));
-      if (u.mainPhotoUrl && !isValidStorageUrl(u.mainPhotoUrl)) { u.mainPhotoUrl = ''; u.mainPhotoName = ''; }
-      if (!u.designPlans) u.designPlans = [];
-      u.designPlans = u.designPlans.filter(p => isValidStorageUrl(p.url));
-    });
-  } else {
-    buildDefaults();
-  }
-  // Push local data up to Firestore in background
-  if (firestoreReady) syncToFirestore();
+  // Normalise whatever we ended up with, from either source.
+  Object.values(DATA).forEach(u => {
+    if (!u.photos) u.photos = [];
+    // Strip any blob URLs that survived from a previous bad session
+    u.photos = u.photos.filter(p => isValidStorageUrl(p.url));
+    if (u.mainPhotoUrl && !isValidStorageUrl(u.mainPhotoUrl)) { u.mainPhotoUrl = ''; u.mainPhotoName = ''; }
+    if (!u.designPlans) u.designPlans = [];
+    u.designPlans = u.designPlans.filter(p => isValidStorageUrl(p.url));
+  });
+
+  // These used to sit below an early return, so on any account that already
+  // had cloud data they never ran at all — which is why shared installs, the
+  // trade roster and the task list had to be recovered by hand every time.
   renderMap();
   updateStats();
   loadClubhouse();
@@ -1518,10 +1553,18 @@ function buildDefaults() {
 }
 
 function persist(unitId = selectedId) {
+  // Stamp before writing — this is what lets the next load tell which copy of
+  // a garage is newer instead of assuming the cloud always wins.
+  if (unitId && DATA[unitId]) DATA[unitId]._updated = Date.now();
   lsSet('gota_hvac_v2', JSON.stringify(DATA));
-  if (!firestoreReady || !unitId) return;
+  if (!firestoreReady || !unitId || !DATA[unitId]) return;
   return db.collection('units').doc(String(unitId)).set(DATA[unitId])
-    .catch(e => console.error('Firestore save error:', e));
+    .catch(e => {
+      console.error('Firestore save error:', e);
+      // The local copy is already safe and init() will retry the upload, so
+      // say so rather than letting it look like a clean save.
+      showToast('📴', 'Saved on this device — will sync when back online');
+    });
 }
 
 async function syncToFirestore() {
