@@ -2835,7 +2835,10 @@ function constProgress(u) {
   return { done, total, pct: total ? Math.round(done / total * 100) : 0 };
 }
 
-function constRowHtml(u, it, kind) {
+// `withMoney` is only ever true for HVAC. The other eleven trades are tracked
+// for progress — their material and labour belong to their own contractors,
+// not to you, so the cost block would be noise on every row.
+function constRowHtml(u, it, kind, withMoney) {
   const d = constItem(u, it.key);
   const isOption = !!it.option;
   const active = !isOption || d.requested;
@@ -2876,7 +2879,7 @@ function constRowHtml(u, it, kind) {
     });
     h += `<button class="cs-photo-add" onclick="triggerConstPhoto('${it.key}')" title="Add a photo of the completed work">📷<span>Add photo</span></button>`;
     h += `</div>`;
-    h += matBlockHtml(u, it);
+    if (withMoney) h += matBlockHtml(u, it);
   }
   h += `</div>`;
   return h;
@@ -2985,9 +2988,9 @@ function hvacJobTabHtml(u) {
   // ── Tasks ──
   const builtins = sec.items.filter(it => !(it.corner && !corner));
   h += `<div class="cs-section" style="margin-bottom:10px">`;
-  builtins.forEach(it => h += constRowHtml(u, it, 'builtin'));
-  customItemsFor('hvac', u.id).forEach(it => h += constRowHtml(u, it, 'building'));
-  unitItemsFor(u, 'hvac').forEach(it => h += constRowHtml(u, it, 'unit'));
+  builtins.forEach(it => h += constRowHtml(u, it, 'builtin', true));
+  customItemsFor('hvac', u.id).forEach(it => h += constRowHtml(u, it, 'building', true));
+  unitItemsFor(u, 'hvac').forEach(it => h += constRowHtml(u, it, 'unit', true));
   h += `<button class="btn btn-gray" style="width:100%;font-size:11px;margin-top:2px;border-style:dashed;color:#8A7455" onclick="openAddInstallModal('hvac','${u.id}')" title="Add an HVAC task and pick which garages get it">+ Add HVAC task</button>`;
   h += `</div>`;
 
