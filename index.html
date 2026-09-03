@@ -1326,6 +1326,10 @@
     <div>
       <div style="font-size:16px;font-weight:800;color:#7FD8F0">📦 MATERIALS</div>
       <div style="font-size:11px;color:#7A8C6A;margin-top:2px">Receipts, truck stock, and what each garage actually used</div>
+      <div style="font-size:10px;color:#4D5C3D;margin-top:3px">
+        Build <span id="buildStamp" class="mono"></span>
+        <button onclick="forceUpdate()" style="background:none;border:none;color:#7FD8F0;cursor:pointer;font-size:10px;text-decoration:underline;padding:0 0 0 6px">Force update</button>
+      </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button onclick="matPickReceipt()" class="btn btn-tan" style="font-size:12px;padding:6px 14px">🧾 Add receipt</button>
@@ -1383,6 +1387,10 @@ function lsSet(key, value) {
 function lsGet(key) {
   try { return localStorage.getItem(key); } catch (e) { return null; }
 }
+
+// Bumped on every deploy so the running build is identifiable on sight.
+const BUILD = '2026-09-03 15:05 UTC';
+window.__BUILD = BUILD;
 
 let storage = null;
 let db = null;
@@ -4020,6 +4028,7 @@ function closeMat() { document.getElementById('matPanel').classList.remove('open
 function setMatView(v) { matView = v; renderMat(); }
 function renderMat() {
   const body = document.getElementById('matBody'); if (!body) return;
+  const bs = document.getElementById('buildStamp'); if (bs) bs.textContent = BUILD;
   document.querySelectorAll('#matTabs .tl-tab').forEach(t => t.classList.toggle('active', t.dataset.v === matView));
   body.innerHTML = matView === 'inbox' ? matInboxHtml()
                  : matView === 'stock' ? matStockHtml()
@@ -4031,7 +4040,14 @@ function matInboxHtml() {
   const pend = matLive(MAT.receipts).filter(r => r.status === 'review');
   const done = matLive(MAT.receipts).filter(r => r.status === 'done')
     .sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 12);
-  let h = `<div class="mat-drop" onclick="matPickReceipt()"
+  let h = '';
+  if (!ANTHROPIC_API_KEY) {
+    h += `<div class="b7-alert" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <span>🔑 No API key set — receipts will upload but nothing will be read from them.</span>
+      <button class="btn btn-tan" style="font-size:11px" onclick="promptApiKey();renderMat()">Set API key</button>
+    </div>`;
+  }
+  h += `<div class="mat-drop" onclick="matPickReceipt()"
       ondragover="matDropOver(event,this)" ondragenter="matDropOver(event,this)"
       ondragleave="matDropLeave(this)" ondrop="handleReceiptDrop(event,this)">
       <div style="font-size:26px">🧾</div>
@@ -7431,6 +7447,23 @@ if ('serviceWorker' in navigator) {
     });
   });
 }
+// When a stale cached shell is stuck, this is the way out: drop every cache,
+// unregister the worker, and come back on a cache-busted URL.
+async function forceUpdate() {
+  showToast('⏳', 'Clearing the cached app…');
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  } catch (e) { console.warn('Cache clear:', e); }
+  location.replace(location.pathname + '?v=' + Date.now());
+}
+
 function applySwUpdate() {
   if (swWaiting) swWaiting.postMessage('skipWaiting');
   const el = document.getElementById('swUpdate'); if (el) el.style.display = 'none';

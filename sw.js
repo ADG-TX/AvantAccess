@@ -8,7 +8,7 @@
  *
  * Bump CACHE_VERSION on release — old caches are dropped on activate.
  */
-const CACHE_VERSION = 'gota-v3';
+const CACHE_VERSION = 'gota-v4';
 const SHELL = CACHE_VERSION + '-shell';
 
 // Everything needed to render the app with no network at all.
