@@ -149,17 +149,21 @@
     .step-hrs input{width:62px;background:#07090F;border:1px solid #16283A;color:#DDE8EE;border-radius:6px;
                     padding:7px 8px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
     .mat-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-    .tmr,.two-p{background:#0A1620;border:1px solid #2A5878;color:#7FD8F0;border-radius:5px;
-                padding:6px 11px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
-    .tmr:hover,.two-p:hover{border-color:#4FB8D8;background:#0E2030}
-    .tmr-on{background:#3A0E08;border-color:#C0392B;color:#F5A5A0;animation:tmrPulse 1.6s ease-in-out infinite}
-    @keyframes tmrPulse{0%,100%{opacity:1}50%{opacity:.62}}
+    .two-p{background:#0A1620;border:1px solid #2A5878;color:#7FD8F0;border-radius:5px;
+           padding:6px 11px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
+    .two-p:hover{border-color:#4FB8D8;background:#0E2030}
+    .tm{display:inline-flex;align-items:center;gap:5px}
+    .tm-lbl{font-size:11px;font-weight:700;color:#5F7A8A;white-space:nowrap;margin-right:3px}
+    .tm-in{width:54px;background:#07090F;border:1px solid #16283A;color:#DDE8EE;border-radius:6px;
+           padding:7px 8px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;
+           font-family:inherit}
+    .tm-in:focus{border-color:#4FB8D8}
+    .tm-u{font-size:11px;font-weight:700;color:#5F7A8A;margin-right:4px}
     .two-p.on{background:#241A38;border-color:#6A4C9C;color:#C9AEEA}
     /* Waiting-on-someone log */
     .blk{background:#0D1509;border:1px solid #1C2D16;border-radius:8px;padding:10px 12px;margin-bottom:12px}
     .blk-open{background:#241A08;border-color:#E08800}
     .blk-row{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:3px 0;color:#B8C9A0;flex-wrap:wrap}
-    @media(prefers-reduced-motion:reduce){.tmr-on{animation:none}}
     .mat-f{display:flex;flex-direction:column;gap:3px;min-width:0}
     .mat-f>span{font-size:9px;font-weight:700;color:#5F7A8A;letter-spacing:.05em;text-transform:uppercase}
     .mat-f input{background:#07090F;border:1px solid #16283A;color:#C8D0E0;border-radius:5px;
@@ -195,7 +199,8 @@
          side with the delete pinned to the end. */
       .m-row{grid-template-columns:minmax(0,1fr) 88px 26px;row-gap:5px}
       .m-row .m-name{grid-column:1/-1}
-      .step-foot .tmr,.step-foot .two-p{flex:1 1 auto;min-height:38px;text-align:center}
+      .step-foot{gap:10px}
+      .step-foot .two-p{min-height:38px}
       .step{padding:12px}
     }
 
@@ -347,7 +352,7 @@
       .mat-f input,.mat-cost,.mat-hrs,.mat-note,.hv-contract,
       .tl-addrow input,.tl-addrow select,
       .b7-row input,.b7-row select,
-      .mat-entry input,.step-in,.step-ta,.m-row input,.m-row select,.step-hrs input{font-size:16px!important}
+      .step-in,.step-ta,.m-row input,.m-row select,.tm-in{font-size:16px!important}
       /* Overlay heads wrap instead of overflowing */
       .b7-head,.tl-head{flex-wrap:wrap;gap:8px;padding:12px 14px}
       .b7-body,.tl-body{padding:12px}
@@ -2525,6 +2530,12 @@ function constItem(u, key) {
   else if (it.status === 'done')   it.status = 'finished';
   if (typeof it.hours !== 'number') it.hours = Number(it.hours) || 0;
   if (typeof it.tip !== 'string') it.tip = it.tip ? String(it.tip) : '';
+  // A timer left running when the feature was removed would otherwise sit in
+  // the data forever. Bank whatever it had counted, then drop it.
+  if (it.timerStart) {
+    it.hours = Math.round((it.hours + (Date.now() - it.timerStart) / 3600000) * 1000) / 1000;
+    delete it.timerStart;
+  }
 
   // Materials are a list of lines: what it was, what it cost, where from.
   // Two earlier shapes get folded in so nothing already logged is lost —
@@ -2567,47 +2578,25 @@ function itemMaterialTotal(d) {
   return (d.materials || []).reduce((s, m) => s + (Number(m.cost) || 0), 0);
 }
 
-// ── Live timer ──
-// Typing hours after the fact means guessing. One timer runs at a time; the
-// start time is persisted so it survives a reload, a locked phone, or the app
-// being closed mid-task.
-function timerElapsedHrs(d) {
-  if (!d.timerStart) return 0;
-  return (Date.now() - d.timerStart) / 3600000;
+// ── Time on a step ──
+// Entered as hours and minutes, stored as decimal hours so every rollup keeps
+// working, and shown back as h/m because nobody thinks in 9.75 of an hour.
+function fmtHrs(dec) {
+  const t = Math.round((Number(dec) || 0) * 60);
+  if (!t) return '';
+  const h = Math.floor(t / 60), m = t % 60;
+  return h && m ? h + 'h ' + m + 'm' : h ? h + 'h' : m + 'm';
 }
-function findRunningTimer() {
-  for (const id of B7_UNIT_IDS) {
-    const u = DATA[id]; if (!u || !u.construction) continue;
-    for (const key of Object.keys(u.construction)) {
-      const it = u.construction[key];
-      if (it && it.timerStart) return { unitId: id, key, item: it };
-    }
-  }
-  return null;
-}
-function startConstTimer(key) {
+function hrsPart(dec) { return Math.floor(Math.round((Number(dec) || 0) * 60) / 60); }
+function minPart(dec) { return Math.round((Number(dec) || 0) * 60) % 60; }
+// Minutes over 59 roll into hours rather than being rejected — typing 90 in
+// the minutes box means an hour and a half, not an error.
+function setStepTime(key, h, m) {
   const u = DATA[selectedId]; if (!u) return;
-  const running = findRunningTimer();
-  if (running && !(running.unitId === selectedId && running.key === key)) {
-    stopConstTimer(running.key, running.unitId, true);
-    showToast('⏱', 'Stopped the timer already running on #' + running.unitId);
-  }
-  constItem(u, key).timerStart = Date.now();
+  const hh = Math.max(0, Number(String(h).replace(/[^0-9]/g, '')) || 0);
+  const mm = Math.max(0, Number(String(m).replace(/[^0-9]/g, '')) || 0);
+  constItem(u, key).hours = Math.round((hh + mm / 60) * 1000) / 1000;
   constTouch(u); persist(); drawPanel(); switchTab(activeTab);
-  showToast('▶️', 'Timer started');
-}
-function stopConstTimer(key, unitId, quiet) {
-  const u = DATA[unitId || selectedId]; if (!u) return;
-  const d = constItem(u, key);
-  if (!d.timerStart) return;
-  const add = timerElapsedHrs(d);
-  d.hours = Math.round(((Number(d.hours) || 0) + add) * 100) / 100;
-  d.timerStart = null;
-  constTouch(u); persist();
-  if (!quiet) {
-    drawPanel(); switchTab(activeTab);
-    showToast('⏹', 'Logged ' + (Math.round(add * 100) / 100) + ' hr');
-  }
 }
 function toggleTwoPerson(key) {
   const u = DATA[selectedId]; if (!u) return;
@@ -2758,11 +2747,6 @@ function vendorTotals(tradeId) {
   });
   return out;
 }
-function setConstHours(key, value) {
-  const u = DATA[selectedId]; if (!u) return;
-  constItem(u, key).hours = Number(String(value).replace(/[^0-9.]/g, '')) || 0;
-  constTouch(u); persist(); drawPanel(); switchTab(activeTab);
-}
 function setHvacContract(value) {
   const u = DATA[selectedId]; if (!u) return;
   u.hvacContract = Number(String(value).replace(/[^0-9.]/g, '')) || 0;
@@ -2780,8 +2764,6 @@ function hvacStepHtml(u, it, kind) {
   const mats = d.materials || [];
   const total = itemMaterialTotal(d);
   const hrs = Number(d.hours) || 0;
-  const running = !!d.timerStart;
-  const live = running ? Math.round(timerElapsedHrs(d) * 100) / 100 : 0;
   const photos = d.photos || [];
   const scope = kind === 'building'
     ? `<span class="step-scope">${(it.units && it.units.length) ? it.units.length + ' garages' : 'all garages'}</span>`
@@ -2801,7 +2783,7 @@ function hvacStepHtml(u, it, kind) {
 
     ${(total || hrs) ? `<div class="step-stats">
       ${total ? `<span>🧾 ${money(total)}</span>` : ''}
-      ${hrs ? `<span>⏱ ${hrs} hr</span>` : ''}
+      ${hrs ? `<span>⏱ ${fmtHrs(hrs)}</span>` : ''}
       ${photos.length ? `<span>📷 ${photos.length}</span>` : ''}
     </div>` : ''}
 
@@ -2848,11 +2830,13 @@ function hvacStepHtml(u, it, kind) {
     </div>
 
     <div class="step-foot">
-      ${running
-        ? `<button class="tmr tmr-on" onclick="stopConstTimer('${it.key}')">⏹ Stop · ${live} hr</button>`
-        : `<button class="tmr" onclick="startConstTimer('${it.key}')">▶️ Start timer</button>`}
-      <label class="step-hrs">Total <input value="${escAttr(hrs || '')}" placeholder="0" inputmode="decimal"
-        onchange="setConstHours('${it.key}',this.value)"> hrs</label>
+      <div class="tm">
+        <span class="tm-lbl">Time on this step</span>
+        <input class="tm-in" id="tmh_${it.key}" value="${escAttr(hrsPart(hrs) || '')}" placeholder="0" inputmode="numeric"
+          aria-label="Hours" onchange="setStepTime('${it.key}',this.value,document.getElementById('tmm_${it.key}').value)"><span class="tm-u">h</span>
+        <input class="tm-in" id="tmm_${it.key}" value="${escAttr(minPart(hrs) || '')}" placeholder="00" inputmode="numeric"
+          aria-label="Minutes" onchange="setStepTime('${it.key}',document.getElementById('tmh_${it.key}').value,this.value)"><span class="tm-u">m</span>
+      </div>
       <button class="two-p ${d.twoPerson ? 'on' : ''}" onclick="toggleTwoPerson('${it.key}')"
         title="Flag steps needing a second pair of hands so they can be batched">
         ${d.twoPerson ? '👥 Needs 2' : '👤 1 person'}</button>
@@ -3042,7 +3026,7 @@ function hvacJobTabHtml(u) {
       </div>
       <div class="hv-cell">
         <span class="hv-k">Hours</span>
-        <span class="hv-v">${t.hours || '—'}</span>
+        <span class="hv-v">${fmtHrs(t.hours) || '—'}</span>
       </div>
       <div class="hv-cell">
         <span class="hv-k">Per hour</span>
@@ -3123,8 +3107,8 @@ function hvacJobTabHtml(u) {
         <div class="hv-cell"><span class="hv-k">Garages</span><span class="hv-v">${b.garages}/14</span></div>
         <div class="hv-cell"><span class="hv-k">Material</span><span class="hv-v">${money(b.materials)}</span></div>
         <div class="hv-cell"><span class="hv-k">Avg / garage</span><span class="hv-v" style="color:#7FD8F0">${b.garages ? money(avgMat) : '—'}</span></div>
-        <div class="hv-cell"><span class="hv-k">Hours</span><span class="hv-v">${Math.round(b.hours * 10) / 10}</span></div>
-        <div class="hv-cell"><span class="hv-k">Avg hrs</span><span class="hv-v">${b.garages ? Math.round(avgHrs * 10) / 10 : '—'}</span></div>
+        <div class="hv-cell"><span class="hv-k">Hours</span><span class="hv-v">${fmtHrs(b.hours) || '—'}</span></div>
+        <div class="hv-cell"><span class="hv-k">Avg / garage</span><span class="hv-v">${b.garages ? fmtHrs(avgHrs) : '—'}</span></div>
       </div>
     </div>`;
 
@@ -3200,7 +3184,7 @@ function constructionTabHtml(u) {
   // HVAC lives on its own tab — this one is the other trades.
   const hv = tradeTotals(u, 'hvac');
   html += `<div class="hv-jump" onclick="switchTab('hvacjob')" title="Open the HVAC job tab">
-      <span>❄️ <strong>HVAC</strong> has its own tab — ${hv.done}/${hv.total} done${hv.materials ? ' · ' + money(hv.materials) + ' material' : ''}${hv.hours ? ' · ' + hv.hours + ' hrs' : ''}</span>
+      <span>❄️ <strong>HVAC</strong> has its own tab — ${hv.done}/${hv.total} done${hv.materials ? ' · ' + money(hv.materials) + ' material' : ''}${hv.hours ? ' · ' + fmtHrs(hv.hours) : ''}</span>
       <span style="color:#7FD8F0;font-weight:800">Open →</span>
     </div>`;
 
