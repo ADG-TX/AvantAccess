@@ -105,6 +105,36 @@
     .mat-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:9px;font-weight:800;
               color:#5F7A8A;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px}
     .mat-sum{color:#7FD8F0;font-weight:800;letter-spacing:0;font-size:11px;font-variant-numeric:tabular-nums}
+    /* ── Materials panel ── */
+    #matPanel{position:fixed;inset:0;z-index:126;background:#07090F;display:none;flex-direction:column}
+    #matPanel.open{display:flex}
+    .mat-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center;
+              border:2px dashed #22323F;border-radius:12px;background:#080D12;padding:24px 16px;margin-bottom:18px;
+              transition:border-color .15s,background .15s}
+    .mat-drop.over{border-color:#4FB8D8;background:#0C1A24}
+    .mat-card{background:#0B1219;border:1px solid #1A2A38;border-radius:9px;padding:13px;margin-bottom:9px}
+    .mat-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+    .rl-head,.rl{display:grid;grid-template-columns:minmax(0,2fr) 62px 74px 82px minmax(0,1.6fr) 24px;gap:6px;align-items:center}
+    .rl-head{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#5F7A8A;
+             padding-bottom:5px;border-bottom:1px solid #1A2A38;margin-bottom:7px}
+    .rl{margin-bottom:6px}
+    .rl input,.rl select{background:#07090F;border:1px solid #16283A;color:#DDE8EE;border-radius:6px;
+                         padding:7px 8px;font-size:12.5px;width:100%;min-width:0;font-family:inherit}
+    .rl input:focus,.rl select:focus{border-color:#4FB8D8}
+    .rl .num{text-align:right;font-variant-numeric:tabular-nums}
+    .rl-where{display:flex;flex-direction:column;gap:4px;min-width:0}
+    .mat-row{display:flex;justify-content:space-between;gap:12px;padding:9px 12px;background:#0D1509;
+             border:1px solid #1C2D16;border-radius:7px;margin-bottom:5px;font-size:12.5px;color:#DDD5B8;flex-wrap:wrap}
+    .mat-row>span:last-child{font-weight:700;color:#7FD8F0;font-variant-numeric:tabular-nums;white-space:nowrap}
+    .mat-tag{font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#7FD8F0;
+             border:1px solid #2A5878;border-radius:20px;padding:1px 7px;margin-left:6px}
+    @media(max-width:700px){
+      .rl-head{display:none}
+      .rl{grid-template-columns:minmax(0,1fr) 62px 24px;row-gap:5px}
+      .rl>*:nth-child(1){grid-column:1/3}
+      .rl-where{grid-column:1/4}
+    }
+
     /* ── HVAC step card ── */
     .step{background:#0B1219;border:1px solid #1A2A38;border-radius:10px;padding:14px;margin-bottom:12px;
           display:flex;flex-direction:column;gap:12px;transition:border-color .15s}
@@ -352,7 +382,7 @@
       .mat-f input,.mat-cost,.mat-hrs,.mat-note,.hv-contract,
       .tl-addrow input,.tl-addrow select,
       .b7-row input,.b7-row select,
-      .step-in,.step-ta,.m-row input,.m-row select,.tm-in{font-size:16px!important}
+      .step-in,.step-ta,.m-row input,.m-row select,.tm-in,.rl input,.rl select{font-size:16px!important}
       /* Overlay heads wrap instead of overflowing */
       .b7-head,.tl-head{flex-wrap:wrap;gap:8px;padding:12px 14px}
       .b7-body,.tl-body{padding:12px}
@@ -608,6 +638,9 @@
 
     <!-- Task List -->
     <button onclick="openTaskList()" class="btn" style="font-size:11px;padding:5px 14px;flex-shrink:0;font-weight:800;color:#0A0C0F;background:#E5FF00;border-color:#B8CC00;box-shadow:0 0 10px rgba(229,255,0,.45)" title="Task list & job progress log">📋 TASK LIST</button>
+
+    <!-- Materials -->
+    <button onclick="openMat()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0;border-color:#2A5878;color:#7FD8F0" title="Receipts, truck stock and per-garage material cost">📦 Materials</button>
 
     <!-- Multi-select -->
     <button id="btnMultiSelect" onclick="toggleMultiSelect()" class="btn btn-gray" style="font-size:11px;padding:5px 12px;flex-shrink:0" title="Select multiple units to bulk-schedule a job">☑ Select Units</button>
@@ -1288,6 +1321,27 @@
   <div class="tl-body" id="tlBody"></div>
 </div>
 
+<div id="matPanel">
+  <div class="tl-head" style="border-bottom-color:rgba(127,216,240,.22)">
+    <div>
+      <div style="font-size:16px;font-weight:800;color:#7FD8F0">📦 MATERIALS</div>
+      <div style="font-size:11px;color:#7A8C6A;margin-top:2px">Receipts, truck stock, and what each garage actually used</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button onclick="matPickReceipt()" class="btn btn-tan" style="font-size:12px;padding:6px 14px">🧾 Add receipt</button>
+      <button onclick="closeMat()" class="btn btn-gray" style="font-size:12px;padding:6px 12px">✕ Close</button>
+    </div>
+  </div>
+  <div class="tl-tabs" id="matTabs">
+    <div class="tl-tab active" data-v="inbox" onclick="setMatView('inbox')">🧾 Receipts</div>
+    <div class="tl-tab" data-v="stock" onclick="setMatView('stock')">📦 Truck stock</div>
+    <div class="tl-tab" data-v="pot" onclick="setMatView('pot')">🫙 Consumables</div>
+    <div class="tl-tab" data-v="catalog" onclick="setMatView('catalog')">📖 Known items</div>
+  </div>
+  <div class="tl-body" id="matBody"></div>
+</div>
+<input type="file" id="matReceiptInput" accept="application/pdf,image/*" style="display:none" onchange="handleReceiptFile(this)">
+
 <!-- Offline banner -->
 <div id="netBanner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:150;background:#4A360C;border-top:1px solid #E08800;color:#F5C840;font-size:12px;font-weight:700;padding:9px 14px;align-items:center;justify-content:center;gap:8px;padding-bottom:max(9px,env(safe-area-inset-bottom))">
   📴 Offline — everything you log is saved here and syncs when signal returns
@@ -1558,6 +1612,7 @@ async function init() {
   loadSitePhotos();
   loadB7Custom();
   loadB7Trades();
+  loadMat();
   loadTaskList();
   startIntakeListener();
 }
@@ -2998,7 +3053,9 @@ function hvacJobTabHtml(u) {
   const t = tradeTotals(u, 'hvac');
   const pct = t.total ? Math.round((t.done / t.total) * 100) : 0;
   const contract = u.hvacContract != null ? Number(u.hvacContract) : 3500;
-  const net = contract - t.materials;
+  // Typed step lines + what was drawn from the truck + this garage's pot share.
+  const matTotal = unitMaterialTotal(u.id);
+  const net = contract - matTotal;
   const rate = t.hours > 0 ? net / t.hours : 0;
   const cond = u.condenser || {};
   const heads = u.headUnits || [];
@@ -3018,7 +3075,7 @@ function hvacJobTabHtml(u) {
       </label>
       <div class="hv-cell">
         <span class="hv-k">Material spent</span>
-        <span class="hv-v" style="color:${t.materials ? '#7FD8F0' : '#4D5C3D'}">${t.materials ? money(t.materials) : '—'}</span>
+        <span class="hv-v" style="color:${matTotal ? '#7FD8F0' : '#4D5C3D'}">${matTotal ? money(matTotal) : '—'}</span>
       </div>
       <div class="hv-cell">
         <span class="hv-k">Net</span>
@@ -3111,6 +3168,23 @@ function hvacJobTabHtml(u) {
         <div class="hv-cell"><span class="hv-k">Avg / garage</span><span class="hv-v">${b.garages ? fmtHrs(avgHrs) : '—'}</span></div>
       </div>
     </div>`;
+
+  // ── Material drawn from the truck, plus this garage's pot share ──
+  const drawn = matLive(MAT.allocs).filter(a => String(a.unitId) === String(u.id));
+  const potShare = unitConsumableCost(u.id);
+  h += `<div class="hv-roll" style="margin-top:12px">
+    <div class="hv-eq-head" style="border:none;padding-bottom:6px">
+      <span>📦 Material from stock &amp; receipts</span>
+      <button class="btn btn-gray" style="font-size:10px;padding:4px 10px" onclick="pullFromStock('${u.id}')">Pull from truck</button>
+    </div>
+    ${drawn.length ? drawn.map(a => `<div class="hv-eq-row">
+        <span>${escHtml(a.name)} <span style="color:#5F7A8A">· ${a.qty} ${escHtml(a.unit)}${a.lotId ? '' : ' · direct'}</span>
+          <button class="tl-del" style="font-size:11px" onclick="removeAlloc('${a.id}')" title="${a.lotId ? 'Put it back on the truck' : 'Remove'}">✕</button></span>
+        <span>${money(a.cost)}</span></div>`).join('')
+      : `<div style="font-size:12px;color:#4D5C3D">Nothing drawn yet. Scan a receipt, or pull from the truck.</div>`}
+    ${potShare ? `<div class="hv-eq-row" style="border-top:1px solid #1C2D16;margin-top:6px;padding-top:6px">
+        <span>Consumables share</span><span>${money(potShare)}</span></div>` : ''}
+  </div>`;
 
   // ── Where the money went, and what is waiting on a helper ──
   const vt = vendorTotals('hvac');
@@ -3563,6 +3637,517 @@ async function recoverB7Items() {
         `storage. The bug that caused it is now fixed, so it will not happen again.`)
   );
   return { found, before, after };
+}
+
+// ════════════════════════════════════════════════════════════
+// MATERIALS — receipts, truck stock, allocation to garages
+// ════════════════════════════════════════════════════════════
+// Buying and using are different events. A 500 ft roll bought under garage
+// 701's PO gets used across 701, 702 and 703 — charging it all to 701 makes
+// the first garage of every building look expensive and the rest look free.
+// So a receipt line becomes a stock lot, and a garage draws from that lot at
+// the real unit cost. What is left over stays on the truck, which is exactly
+// what happens with the offcuts worth keeping.
+let MAT = { catalog: [], receipts: [], lots: [], allocs: [], consum: [], splits: [], updatedAt: 0 };
+let matView = 'inbox';
+let matScanBusy = false;
+let matReviewId = null;
+
+const MAT_UNITS = ['ft', 'ea', 'roll', 'box', 'lb', 'gal', 'tube', 'bag', 'case'];
+const MAT_KINDS = [
+  { v: 'stock',      label: 'Bulk → truck stock', hint: 'Carries across garages. Draw from it as you use it.' },
+  { v: 'direct',     label: 'Straight to a garage', hint: 'Bought for one garage and used there.' },
+  { v: 'consumable', label: 'Consumable',           hint: 'Tape, glue, rods. Goes in the pot and gets split later.' },
+];
+
+function matUid2(p) { return (p || 'x') + Date.now() + '_' + Math.floor(Math.random() * 10000); }
+function matLive(list) { return (list || []).filter(x => !x.deleted); }
+function matNorm(d) {
+  d = d || {};
+  const a = k => Array.isArray(d[k]) ? d[k] : [];
+  return { catalog: a('catalog'), receipts: a('receipts'), lots: a('lots'),
+           allocs: a('allocs'), consum: a('consum'), splits: a('splits'),
+           updatedAt: Number(d.updatedAt) || 0 };
+}
+function persistMat() {
+  MAT.updatedAt = Date.now();
+  lsSet('gota_materials', JSON.stringify(MAT));
+  if (!firestoreReady) return;
+  db.collection('properties').doc('materials').set(JSON.parse(JSON.stringify(MAT)))
+    .catch(e => { console.error('Materials save error:', e); showToast('📴', 'Saved on this device — will sync later'); });
+}
+async function loadMat() {
+  const local = lsGet('gota_materials');
+  if (local) { try { MAT = matNorm(JSON.parse(local)); } catch (e) {} }
+  if (!firestoreReady) return;
+  try {
+    const doc = await db.collection('properties').doc('materials').get();
+    if (!doc.exists) { if (matCount()) persistMat(); return; }
+    const r = matNorm(doc.data());
+    // Merge every list by id — a stale cloud copy must never delete a receipt
+    // or an allocation this device has and has not uploaded yet.
+    ['catalog','receipts','lots','allocs','consum','splits'].forEach(k => {
+      MAT[k] = mergeById(MAT[k], r[k], ['id']);
+    });
+    MAT.updatedAt = Math.max(MAT.updatedAt || 0, r.updatedAt || 0);
+    lsSet('gota_materials', JSON.stringify(MAT));
+    if (matCount() !== ['catalog','receipts','lots','allocs','consum','splits']
+        .reduce((s, k) => s + (r[k] || []).length, 0)) persistMat();
+    if (document.getElementById('matPanel')?.classList.contains('open')) renderMat();
+  } catch (e) { console.warn('Materials load failed, keeping local copy:', e); }
+}
+function matCount() {
+  return ['catalog','receipts','lots','allocs','consum','splits'].reduce((s, k) => s + (MAT[k] || []).length, 0);
+}
+
+// ── Catalog: the app learns an item once, then recognises it ──
+function catFind(name) {
+  const n = String(name || '').trim().toLowerCase();
+  if (!n) return null;
+  return matLive(MAT.catalog).find(c => c.name.toLowerCase() === n)
+      || matLive(MAT.catalog).find(c => n.includes(c.name.toLowerCase()) || c.name.toLowerCase().includes(n))
+      || null;
+}
+function catUpsert(name, unit, unitCost, vendor, bulk) {
+  let c = catFind(name);
+  if (c) {
+    if (unitCost) c.lastCost = unitCost;
+    if (vendor) c.vendor = vendor;
+    if (unit) c.unit = unit;
+    c.seen = (c.seen || 1) + 1;
+    c.updated = Date.now();
+    return c;
+  }
+  c = { id: matUid2('c'), name: String(name || '').trim(), unit: unit || 'ea',
+        lastCost: Number(unitCost) || 0, vendor: vendor || '', bulk: !!bulk,
+        reorderAt: 0, seen: 1, created: Date.now(), updated: Date.now() };
+  MAT.catalog.push(c);
+  return c;
+}
+
+// ── Stock ──
+function lotQtyLeft(l) {
+  const used = matLive(MAT.allocs).filter(a => a.lotId === l.id).reduce((s, a) => s + (Number(a.qty) || 0), 0);
+  return Math.round(((Number(l.qtyIn) || 0) - used) * 1000) / 1000;
+}
+function stockOnHand() {
+  return matLive(MAT.lots).map(l => ({ ...l, left: lotQtyLeft(l) })).filter(l => l.left > 0.0001);
+}
+function stockValue() { return stockOnHand().reduce((s, l) => s + l.left * (Number(l.unitCost) || 0), 0); }
+// Items running low, judged against the reorder point set on the catalog entry.
+function lowStock() {
+  const byCat = {};
+  stockOnHand().forEach(l => {
+    const k = l.catalogId || l.name;
+    byCat[k] = byCat[k] || { name: l.name, unit: l.unit, left: 0, catalogId: l.catalogId };
+    byCat[k].left += l.left;
+  });
+  return Object.values(byCat).map(x => {
+    const c = matLive(MAT.catalog).find(c => c.id === x.catalogId);
+    const at = c && Number(c.reorderAt) || 0;
+    return { ...x, reorderAt: at, low: at > 0 && x.left <= at };
+  }).filter(x => x.low);
+}
+
+// ── What a garage actually consumed ──
+function unitStockCost(unitId) {
+  return matLive(MAT.allocs).filter(a => String(a.unitId) === String(unitId))
+    .reduce((s, a) => s + (Number(a.cost) || 0), 0);
+}
+function unitConsumableCost(unitId) {
+  return matLive(MAT.splits).filter(s => String(s.unitId) === String(unitId))
+    .reduce((s, x) => s + (Number(x.amount) || 0), 0);
+}
+// Manual step lines + drawn stock + this garage's share of the consumable pot.
+function unitMaterialTotal(unitId) {
+  const u = DATA[unitId];
+  const manual = u ? tradeTotals(u, 'hvac').materials : 0;
+  return manual + unitStockCost(unitId) + unitConsumableCost(unitId);
+}
+
+// ── Consumables pot ──
+function potBalance() {
+  const inn = matLive(MAT.consum).reduce((s, c) => s + (Number(c.amount) || 0), 0);
+  const out = matLive(MAT.splits).reduce((s, c) => s + (Number(c.amount) || 0), 0);
+  return Math.round((inn - out) * 100) / 100;
+}
+
+// ════════════════════════════════════════════════════════════
+// RECEIPT SCANNING
+// ════════════════════════════════════════════════════════════
+const RECEIPT_PROMPT = `You are reading a supply-house receipt, invoice or purchase order for an HVAC contractor.
+Extract EVERY line item. Reply with ONLY a JSON object, no prose, no code fence:
+{"vendor":"","date":"YYYY-MM-DD","po":"","total":0,
+ "lines":[{"desc":"","qty":0,"unit":"ft|ea|roll|box|lb|gal|tube|bag|case","unitCost":0,"total":0}]}
+Rules:
+- "po" is the purchase order or job reference. It is often a 3-digit garage number like 701. If it says TRUCK STOCK or similar, put that.
+- "unit" must be one of the listed values; pick the closest to how the item is sold.
+- If a line shows only an extended total, compute unitCost = total / qty.
+- Numbers must be plain numbers, no currency symbols or commas.
+- Omit tax, freight, subtotal and payment lines from "lines".
+- If the image is unreadable, reply exactly: {"error":"unreadable"}`;
+
+function matPickReceipt() { const i = document.getElementById('matReceiptInput'); if (i) { i.value = ''; i.click(); } }
+
+async function handleReceiptFile(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file || matScanBusy) return;
+  if (!ANTHROPIC_API_KEY) { showToast('⚠️', 'Add your Anthropic key first (AI Search → set key)'); return; }
+
+  matScanBusy = true;
+  matStatus('Reading ' + file.name + '…');
+  let stored = { url: '', path: '' };
+  try {
+    // File the original first — the receipt is the evidence behind the numbers.
+    if (firebaseReady && storage) {
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `receipts/${Date.now()}_${safe}`;
+      const ref = storage.ref(path);
+      await ref.put(file);
+      stored = { url: await ref.getDownloadURL(), path };
+    }
+  } catch (e) { console.warn('Receipt upload failed (continuing to read it):', e); }
+
+  try {
+    const b64 = await blobToBase64Data(file);
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    const block = isPdf
+      ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } }
+      : { type: 'image', source: { type: 'base64', media_type: file.type || 'image/jpeg', data: b64 } };
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01',
+                 'content-type': 'application/json', 'anthropic-dangerous-direct-browser-client': 'true' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 3000,
+        messages: [{ role: 'user', content: [block, { type: 'text', text: RECEIPT_PROMPT }] }] }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    const raw = (data.content?.[0]?.text || '').trim().replace(/^```json|^```|```$/g, '').trim();
+    const parsed = JSON.parse(raw);
+    if (parsed.error) throw new Error('could not read that receipt');
+
+    const r = {
+      id: matUid2('r'), vendor: parsed.vendor || '', date: parsed.date || tlTodayISO(),
+      po: String(parsed.po || ''), total: Number(parsed.total) || 0,
+      fileUrl: stored.url, filePath: stored.path, fileName: file.name,
+      status: 'review', created: Date.now(), updated: Date.now(),
+      lines: (parsed.lines || []).map(l => {
+        const qty = Number(l.qty) || 0;
+        const tot = Number(l.total) || 0;
+        const uc = Number(l.unitCost) || (qty ? tot / qty : 0);
+        const known = catFind(l.desc);
+        return { id: matUid2('l'), desc: String(l.desc || '').trim(), qty, unit: l.unit || (known && known.unit) || 'ea',
+                 unitCost: Math.round(uc * 10000) / 10000, total: tot || Math.round(qty * uc * 100) / 100,
+                 // Guess the kind from what we already learned; he confirms it.
+                 kind: known ? (known.bulk ? 'stock' : 'direct') : (qty > 1 && /wire|copper|pvc|line set|insulat|conduit|romex|tstat|t-stat|thermostat/i.test(l.desc || '') ? 'stock' : 'direct'),
+                 unitId: '', catalogId: known ? known.id : '' };
+      }),
+    };
+    // A 3-digit PO is almost always the garage it was bought against.
+    const g = r.po.match(/\b(7\d{2})\b/);
+    if (g && DATA[g[1]]) r.lines.forEach(l => { if (l.kind === 'direct') l.unitId = g[1]; });
+    if (/truck|stock|shop/i.test(r.po)) r.lines.forEach(l => { if (l.kind === 'direct') l.kind = 'consumable'; });
+
+    MAT.receipts.push(r);
+    persistMat();
+    matReviewId = r.id;
+    matView = 'inbox';
+    renderMat();
+    showToast('🧾', r.lines.length + ' line(s) read — check them over');
+  } catch (e) {
+    console.error('Receipt scan failed:', e);
+    showToast('❌', 'Could not read that receipt — add it by hand');
+    matStatus('');
+  }
+  matScanBusy = false;
+  matStatus('');
+}
+function matStatus(msg) { const el = document.getElementById('matStatus'); if (el) el.textContent = msg || ''; }
+
+// ── Review edits ──
+function recLine(rid, lid) {
+  const r = MAT.receipts.find(x => x.id === rid); if (!r) return null;
+  return r.lines.find(l => l.id === lid) || null;
+}
+function setRecLine(rid, lid, field, val) {
+  const l = recLine(rid, lid); if (!l) return;
+  if (field === 'qty' || field === 'unitCost') {
+    l[field] = Number(String(val).replace(/[^0-9.]/g, '')) || 0;
+    l.total = Math.round(l.qty * l.unitCost * 100) / 100;
+  } else l[field] = String(val || '');
+  const r = MAT.receipts.find(x => x.id === rid); if (r) r.updated = Date.now();
+  persistMat(); renderMat();
+}
+function delRecLine(rid, lid) {
+  const r = MAT.receipts.find(x => x.id === rid); if (!r) return;
+  r.lines = r.lines.filter(l => l.id !== lid); r.updated = Date.now();
+  persistMat(); renderMat();
+}
+// Turn a reviewed receipt into stock, direct costs and pot money.
+function commitReceipt(rid) {
+  const r = MAT.receipts.find(x => x.id === rid); if (!r) return;
+  const bad = r.lines.filter(l => l.kind === 'direct' && !l.unitId);
+  if (bad.length) { showToast('⚠️', bad.length + ' line(s) need a garage'); return; }
+  const now = Date.now();
+  r.lines.forEach(l => {
+    const c = catUpsert(l.desc, l.unit, l.unitCost, r.vendor, l.kind === 'stock');
+    l.catalogId = c.id;
+    if (l.kind === 'stock') {
+      MAT.lots.push({ id: matUid2('t'), catalogId: c.id, name: l.desc, unit: l.unit,
+                      unitCost: l.unitCost, qtyIn: l.qty, vendor: r.vendor, receiptId: r.id,
+                      date: r.date, created: now, updated: now });
+    } else if (l.kind === 'direct') {
+      // Straight to a garage: recorded as an allocation with no lot behind it.
+      MAT.allocs.push({ id: matUid2('a'), unitId: String(l.unitId), lotId: '', catalogId: c.id,
+                        name: l.desc, qty: l.qty, unit: l.unit, cost: l.total, vendor: r.vendor,
+                        receiptId: r.id, date: r.date, created: now, updated: now });
+    } else {
+      MAT.consum.push({ id: matUid2('p'), desc: l.desc, amount: l.total, vendor: r.vendor,
+                        receiptId: r.id, date: r.date, created: now, updated: now });
+    }
+  });
+  r.status = 'done'; r.updated = now;
+  persistMat(); renderMat(); drawPanel();
+  showToast('✅', 'Receipt filed');
+}
+function deleteReceipt(rid) {
+  const r = MAT.receipts.find(x => x.id === rid); if (!r) return;
+  if (!confirm('Delete this receipt? Stock and costs already filed from it stay.')) return;
+  r.deleted = true; r.updated = Date.now();
+  persistMat(); renderMat();
+}
+
+// ── Manual entry, for what is already on the truck ──
+function addManualLot() {
+  const name = (prompt('What is it? (e.g. 3/8 x 3/4 line set)') || '').trim(); if (!name) return;
+  const qty = Number((prompt('How much do you have on hand?') || '').replace(/[^0-9.]/g, '')) || 0;
+  if (!qty) return;
+  const unit = (prompt('Unit — ' + MAT_UNITS.join(', '), 'ft') || 'ft').trim();
+  const cost = Number((prompt('Roughly what does it cost per ' + unit + '? (leave blank if unknown)') || '').replace(/[^0-9.]/g, '')) || 0;
+  const c = catUpsert(name, unit, cost, '', true);
+  const now = Date.now();
+  MAT.lots.push({ id: matUid2('t'), catalogId: c.id, name, unit, unitCost: cost, qtyIn: qty,
+                  vendor: 'Opening stock', receiptId: '', date: tlTodayISO(), created: now, updated: now });
+  persistMat(); renderMat();
+  showToast('📦', name + ' added to the truck');
+}
+function setReorderAt(cid, val) {
+  const c = matLive(MAT.catalog).find(x => x.id === cid); if (!c) return;
+  c.reorderAt = Number(String(val).replace(/[^0-9.]/g, '')) || 0;
+  c.updated = Date.now(); persistMat(); renderMat();
+}
+
+// ── Drawing stock onto a garage ──
+function pullFromStock(unitId) {
+  const on = stockOnHand();
+  if (!on.length) { showToast('📦', 'Nothing on the truck yet — scan a receipt or add stock by hand'); return; }
+  const list = on.map((l, i) => `${i + 1}. ${l.name} — ${l.left} ${l.unit} left @ ${money(l.unitCost)}/${l.unit}`).join('\n');
+  const pick = prompt(`Pull onto garage #${unitId}:\n\n${list}\n\nEnter a number:`);
+  const idx = parseInt(pick, 10) - 1;
+  const lot = on[idx]; if (!lot) return;
+  const raw = prompt(`How much of the ${lot.name}?\n${lot.left} ${lot.unit} on hand.\n\nEnter a quantity, or h for half, a for all:`);
+  if (raw == null) return;
+  let qty = /^h/i.test(raw) ? lot.left / 2 : /^a/i.test(raw) ? lot.left : Number(String(raw).replace(/[^0-9.]/g, '')) || 0;
+  qty = Math.min(Math.round(qty * 1000) / 1000, lot.left);
+  if (qty <= 0) return;
+  const now = Date.now();
+  MAT.allocs.push({ id: matUid2('a'), unitId: String(unitId), lotId: lot.id, catalogId: lot.catalogId,
+                    name: lot.name, qty, unit: lot.unit, cost: Math.round(qty * lot.unitCost * 100) / 100,
+                    vendor: lot.vendor, receiptId: lot.receiptId, date: tlTodayISO(), created: now, updated: now });
+  persistMat(); drawPanel(); switchTab('hvacjob');
+  showToast('📦', qty + ' ' + lot.unit + ' of ' + lot.name + ' → #' + unitId);
+}
+function removeAlloc(aid) {
+  const a = matLive(MAT.allocs).find(x => x.id === aid); if (!a) return;
+  a.deleted = true; a.updated = Date.now();
+  persistMat(); drawPanel(); switchTab('hvacjob');
+  showToast('↩️', a.lotId ? 'Returned to the truck' : 'Removed');
+}
+
+// ── Splitting the consumables pot ──
+function splitPot() {
+  const bal = potBalance();
+  if (bal <= 0) { showToast('🫙', 'Nothing in the consumables pot'); return; }
+  const done = B7_UNIT_IDS.filter(id => DATA[id] && tradeTotals(DATA[id], 'hvac').done > 0);
+  const suggested = done.length ? done.join(',') : '';
+  const raw = prompt(`Consumables pot holds ${money(bal)}.\n\nWhich garages should it be split across?\nComma-separated numbers:`, suggested);
+  if (!raw) return;
+  const ids = raw.split(',').map(s => s.trim()).filter(id => DATA[id]);
+  if (!ids.length) { showToast('⚠️', 'No garages recognised'); return; }
+  const each = Math.round((bal / ids.length) * 100) / 100;
+  const now = Date.now();
+  ids.forEach(id => MAT.splits.push({ id: matUid2('s'), unitId: String(id), amount: each,
+                                      note: ids.length + '-way split', date: tlTodayISO(), created: now, updated: now }));
+  persistMat(); renderMat(); drawPanel();
+  showToast('✅', money(each) + ' to each of ' + ids.length + ' garages');
+}
+
+// ── Materials panel ──
+function openMat() { document.getElementById('matPanel').classList.add('open'); loadMat().then(renderMat); renderMat(); }
+function closeMat() { document.getElementById('matPanel').classList.remove('open'); }
+function setMatView(v) { matView = v; renderMat(); }
+function renderMat() {
+  const body = document.getElementById('matBody'); if (!body) return;
+  document.querySelectorAll('#matTabs .tl-tab').forEach(t => t.classList.toggle('active', t.dataset.v === matView));
+  body.innerHTML = matView === 'inbox' ? matInboxHtml()
+                 : matView === 'stock' ? matStockHtml()
+                 : matView === 'pot'   ? matPotHtml()
+                 :                       matCatalogHtml();
+}
+
+function matInboxHtml() {
+  const pend = matLive(MAT.receipts).filter(r => r.status === 'review');
+  const done = matLive(MAT.receipts).filter(r => r.status === 'done')
+    .sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 12);
+  let h = `<div class="mat-drop" ondragover="event.preventDefault();this.classList.add('over')"
+      ondragleave="this.classList.remove('over')"
+      ondrop="event.preventDefault();this.classList.remove('over');document.getElementById('matReceiptInput').files=event.dataTransfer.files;handleReceiptFile(document.getElementById('matReceiptInput'))">
+      <div style="font-size:26px">🧾</div>
+      <div style="font-size:14px;font-weight:700;color:#DDE8EE">Drop a receipt here, or tap to add</div>
+      <div style="font-size:12px;color:#5F7A8A">PDF from Standard Supply or Johnstone · a photo of the Home Depot or Winston paper</div>
+      <button class="btn btn-tan" style="font-size:12px;margin-top:4px" onclick="matPickReceipt()">Choose a file</button>
+      <div id="matStatus" style="font-size:11px;color:#C4A26A;min-height:14px"></div>
+    </div>`;
+
+  h += `<div class="tl-sec-title">Needs checking (${pend.length})</div>`;
+  if (!pend.length) h += `<div style="font-size:12px;color:#5A6A85;margin-bottom:10px">Nothing waiting. Scan a receipt and it lands here.</div>`;
+  pend.forEach(r => { h += matReceiptCard(r, true); });
+
+  h += `<div class="tl-sec-title">Filed (${done.length})</div>`;
+  if (!done.length) h += `<div style="font-size:12px;color:#5A6A85">Nothing filed yet.</div>`;
+  done.forEach(r => { h += matReceiptCard(r, false); });
+  return h;
+}
+
+function matReceiptCard(r, open) {
+  const lineTot = r.lines.reduce((s, l) => s + (Number(l.total) || 0), 0);
+  const expand = open || matReviewId === r.id;
+  let h = `<div class="mat-card">
+    <div class="mat-card-head">
+      <div>
+        <div style="font-size:14px;font-weight:800;color:#DDE8EE">${escHtml(r.vendor || 'Receipt')}</div>
+        <div style="font-size:11px;color:#7A8C6A">${fmtDate(r.date)}${r.po ? ' · PO ' + escHtml(r.po) : ''} · ${r.lines.length} line(s) · ${money(lineTot)}</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        ${r.fileUrl ? `<a class="btn btn-gray" style="font-size:10px;padding:4px 9px" href="${escAttr(r.fileUrl)}" target="_blank" rel="noopener">View</a>` : ''}
+        <button class="tl-del" onclick="deleteReceipt('${r.id}')" title="Delete receipt">🗑</button>
+      </div>
+    </div>`;
+  if (expand) {
+    h += `<div class="rl-head"><span>Item</span><span>Qty</span><span>Unit</span><span>$ / unit</span><span>Where it goes</span><span></span></div>`;
+    r.lines.forEach(l => {
+      h += `<div class="rl">
+        <input value="${escAttr(l.desc)}" onchange="setRecLine('${r.id}','${l.id}','desc',this.value)">
+        <input class="num" value="${escAttr(l.qty)}" inputmode="decimal" onchange="setRecLine('${r.id}','${l.id}','qty',this.value)">
+        <select onchange="setRecLine('${r.id}','${l.id}','unit',this.value)">
+          ${MAT_UNITS.map(u => `<option value="${u}" ${u === l.unit ? 'selected' : ''}>${u}</option>`).join('')}
+        </select>
+        <input class="num" value="${escAttr(l.unitCost)}" inputmode="decimal" onchange="setRecLine('${r.id}','${l.id}','unitCost',this.value)">
+        <div class="rl-where">
+          <select onchange="setRecLine('${r.id}','${l.id}','kind',this.value)">
+            ${MAT_KINDS.map(k => `<option value="${k.v}" ${k.v === l.kind ? 'selected' : ''}>${k.label}</option>`).join('')}
+          </select>
+          ${l.kind === 'direct' ? `<select onchange="setRecLine('${r.id}','${l.id}','unitId',this.value)">
+            <option value="">Which garage…</option>
+            ${B7_UNIT_IDS.map(id => `<option value="${id}" ${id === l.unitId ? 'selected' : ''}>#${id}</option>`).join('')}
+          </select>` : ''}
+        </div>
+        <button class="tl-del" onclick="delRecLine('${r.id}','${l.id}')">✕</button>
+      </div>`;
+    });
+    if (r.status === 'review') {
+      h += `<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn btn-green" style="font-size:12px" onclick="commitReceipt('${r.id}')">✓ File it</button>
+        <span style="font-size:11px;color:#5F7A8A;align-self:center">Bulk goes to the truck · direct goes to a garage · consumables go in the pot</span>
+      </div>`;
+    }
+  }
+  h += `</div>`;
+  return h;
+}
+
+function matStockHtml() {
+  const on = stockOnHand();
+  const low = lowStock();
+  let h = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn btn-tan" style="font-size:12px" onclick="addManualLot()">+ Add stock by hand</button>
+      <span style="font-size:12px;color:#7A8C6A;align-self:center">For what is already on the truck with no receipt.</span>
+    </div>`;
+  h += `<div class="hv-econ" style="margin-bottom:14px"><div class="hv-econ-grid">
+      <div class="hv-cell"><span class="hv-k">On the truck</span><span class="hv-v" style="color:#7FD8F0">${money(stockValue())}</span></div>
+      <div class="hv-cell"><span class="hv-k">Items</span><span class="hv-v">${on.length}</span></div>
+      <div class="hv-cell"><span class="hv-k">Running low</span><span class="hv-v" style="color:${low.length ? '#F5C840' : '#4D5C3D'}">${low.length || '—'}</span></div>
+    </div></div>`;
+  if (low.length) {
+    h += `<div class="b7-alert">⚠ Running low: ${low.map(x => escHtml(x.name) + ' (' + Math.round(x.left * 10) / 10 + ' ' + x.unit + ')').join(' · ')}</div>`;
+  }
+  h += `<div class="tl-sec-title">On hand (${on.length})</div>`;
+  if (!on.length) h += `<div style="font-size:12px;color:#5A6A85">Nothing on the truck. File a receipt with bulk lines, or add stock by hand.</div>`;
+  on.sort((a, b) => b.left * b.unitCost - a.left * a.unitCost).forEach(l => {
+    const c = matLive(MAT.catalog).find(x => x.id === l.catalogId);
+    const pct = l.qtyIn ? Math.round((l.left / l.qtyIn) * 100) : 0;
+    h += `<div class="mat-card" style="padding:11px 13px">
+      <div class="mat-card-head" style="margin-bottom:7px">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:#DDE8EE">${escHtml(l.name)}</div>
+          <div style="font-size:11px;color:#7A8C6A">${money(l.unitCost)}/${escHtml(l.unit)} · ${escHtml(l.vendor || '—')} · ${fmtDate(l.date)}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:15px;font-weight:800;color:#7FD8F0;font-variant-numeric:tabular-nums">${Math.round(l.left * 100) / 100} ${escHtml(l.unit)}</div>
+          <div style="font-size:10px;color:#5F7A8A">of ${l.qtyIn} · ${money(l.left * l.unitCost)}</div>
+        </div>
+      </div>
+      <div class="cs-bar"><div class="cs-bar-fill" style="width:${pct}%"></div></div>
+      ${c ? `<div style="display:flex;gap:6px;align-items:center;margin-top:8px">
+        <span style="font-size:10px;color:#5F7A8A;font-weight:700">Tell me when below</span>
+        <input value="${escAttr(c.reorderAt || '')}" placeholder="0" inputmode="decimal" style="width:70px;font-size:12px;padding:5px 7px"
+          onchange="setReorderAt('${c.id}',this.value)">
+        <span style="font-size:10px;color:#5F7A8A">${escHtml(l.unit)}</span>
+      </div>` : ''}
+    </div>`;
+  });
+  return h;
+}
+
+function matPotHtml() {
+  const bal = potBalance();
+  const inn = matLive(MAT.consum).sort((a, b) => (b.created || 0) - (a.created || 0));
+  const out = matLive(MAT.splits).sort((a, b) => (b.created || 0) - (a.created || 0));
+  let h = `<div class="hv-econ" style="margin-bottom:12px">
+    <div class="hv-econ-grid">
+      <div class="hv-cell"><span class="hv-k">In the pot</span><span class="hv-v" style="color:${bal > 0 ? '#F5C840' : '#4D5C3D'}">${money(bal)}</span></div>
+      <div class="hv-cell"><span class="hv-k">Bought</span><span class="hv-v">${money(inn.reduce((s, x) => s + x.amount, 0))}</span></div>
+      <div class="hv-cell"><span class="hv-k">Split out</span><span class="hv-v">${money(out.reduce((s, x) => s + x.amount, 0))}</span></div>
+    </div>
+    <div class="hv-econ-note">Tape, glue, brazing rods, fittings — too small to chase per garage. They collect here and get divided across the garages you actually did.</div>
+    <button class="btn btn-tan" style="font-size:12px;margin-top:10px" onclick="splitPot()">Split the pot across garages</button>
+  </div>`;
+  h += `<div class="tl-sec-title">Bought (${inn.length})</div>`;
+  if (!inn.length) h += `<div style="font-size:12px;color:#5A6A85;margin-bottom:8px">Nothing yet. Tag receipt lines as Consumable and they land here.</div>`;
+  inn.forEach(c => { h += `<div class="mat-row"><span>${escHtml(c.desc)} <span style="color:#5F7A8A">· ${escHtml(c.vendor || '')} ${fmtDate(c.date)}</span></span><span>${money(c.amount)}</span></div>`; });
+  h += `<div class="tl-sec-title">Split out (${out.length})</div>`;
+  if (!out.length) h += `<div style="font-size:12px;color:#5A6A85">Nothing split yet.</div>`;
+  out.forEach(s => { h += `<div class="mat-row"><span>#${escHtml(s.unitId)} <span style="color:#5F7A8A">· ${escHtml(s.note || '')} ${fmtDate(s.date)}</span></span><span>${money(s.amount)}</span></div>`; });
+  return h;
+}
+
+function matCatalogHtml() {
+  const c = matLive(MAT.catalog).sort((a, b) => (b.seen || 0) - (a.seen || 0));
+  let h = `<div style="font-size:12px;color:#7A8C6A;margin-bottom:12px">Every item the app has seen on a receipt. It uses this to recognise the same thing next time and to guess whether it is bulk or goes straight to a garage.</div>`;
+  h += `<div class="tl-sec-title">Known items (${c.length})</div>`;
+  if (!c.length) h += `<div style="font-size:12px;color:#5A6A85">Nothing learned yet — file a receipt.</div>`;
+  c.forEach(x => {
+    h += `<div class="mat-row">
+      <span>${escHtml(x.name)}
+        <span style="color:#5F7A8A">· ${escHtml(x.unit)} · seen ${x.seen || 1}×${x.vendor ? ' · ' + escHtml(x.vendor) : ''}</span>
+        ${x.bulk ? '<span class="mat-tag">bulk</span>' : ''}</span>
+      <span>${x.lastCost ? money(x.lastCost) + '/' + escHtml(x.unit) : '—'}</span>
+    </div>`;
+  });
+  return h;
 }
 
 // ════════════════════════════════════════════════════════════
