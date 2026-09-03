@@ -1338,7 +1338,9 @@
     <div class="tl-tab" data-v="pot" onclick="setMatView('pot')">🫙 Consumables</div>
     <div class="tl-tab" data-v="catalog" onclick="setMatView('catalog')">📖 Known items</div>
   </div>
-  <div class="tl-body" id="matBody"></div>
+  <div class="tl-body" id="matBody"
+       ondragover="matDropOver(event,this)" ondragenter="matDropOver(event,this)"
+       ondragleave="matDropLeave(this)" ondrop="handleReceiptDrop(event,this)"></div>
 </div>
 <input type="file" id="matReceiptInput" accept="application/pdf,image/*" style="display:none" onchange="handleReceiptFile(this)">
 
@@ -3789,10 +3791,37 @@ Rules:
 
 function matPickReceipt() { const i = document.getElementById('matReceiptInput'); if (i) { i.value = ''; i.click(); } }
 
-async function handleReceiptFile(input) {
+// Two ways in — the file picker, and a drop. Both hand a real File to the same
+// place. The earlier version tried to push the dropped FileList back into the
+// hidden <input>, which Safari refuses outright and other browsers do not
+// handle consistently, so drops silently did nothing.
+function handleReceiptFile(input) {
   const file = input.files && input.files[0];
   input.value = '';
+  scanReceipt(file);
+}
+function matDropOver(e, el) { e.preventDefault(); e.stopPropagation(); el.classList.add('over'); }
+function matDropLeave(el) { el.classList.remove('over'); }
+function handleReceiptDrop(e, el) {
+  e.preventDefault(); e.stopPropagation();
+  if (el) el.classList.remove('over');
+  const dt = e.dataTransfer;
+  let file = dt && dt.files && dt.files[0];
+  // Some sources hand over DataTransferItems rather than a populated files list.
+  if (!file && dt && dt.items && dt.items.length) {
+    for (const it of dt.items) { if (it.kind === 'file') { file = it.getAsFile(); break; } }
+  }
+  if (!file) { showToast('⚠️', 'No file in that drop — try the Choose a file button'); return; }
+  scanReceipt(file);
+}
+
+async function scanReceipt(file) {
   if (!file || matScanBusy) return;
+  const isPdfFile = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+  if (!isPdfFile && !(file.type || '').startsWith('image/')) {
+    showToast('⚠️', 'Receipts need to be a PDF or a photo');
+    return;
+  }
   if (!ANTHROPIC_API_KEY) { showToast('⚠️', 'Add your Anthropic key first (AI Search → set key)'); return; }
 
   matScanBusy = true;
@@ -3811,7 +3840,7 @@ async function handleReceiptFile(input) {
 
   try {
     const b64 = await blobToBase64Data(file);
-    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    const isPdf = isPdfFile;
     const block = isPdf
       ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } }
       : { type: 'image', source: { type: 'base64', media_type: file.type || 'image/jpeg', data: b64 } };
@@ -4002,9 +4031,9 @@ function matInboxHtml() {
   const pend = matLive(MAT.receipts).filter(r => r.status === 'review');
   const done = matLive(MAT.receipts).filter(r => r.status === 'done')
     .sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 12);
-  let h = `<div class="mat-drop" ondragover="event.preventDefault();this.classList.add('over')"
-      ondragleave="this.classList.remove('over')"
-      ondrop="event.preventDefault();this.classList.remove('over');document.getElementById('matReceiptInput').files=event.dataTransfer.files;handleReceiptFile(document.getElementById('matReceiptInput'))">
+  let h = `<div class="mat-drop" onclick="matPickReceipt()"
+      ondragover="matDropOver(event,this)" ondragenter="matDropOver(event,this)"
+      ondragleave="matDropLeave(this)" ondrop="handleReceiptDrop(event,this)">
       <div style="font-size:26px">🧾</div>
       <div style="font-size:14px;font-weight:700;color:#DDE8EE">Drop a receipt here, or tap to add</div>
       <div style="font-size:12px;color:#5F7A8A">PDF from Standard Supply or Johnstone · a photo of the Home Depot or Winston paper</div>
@@ -4855,6 +4884,15 @@ function tlRestore() {
 }
 
 // Never lose the last keystroke on the way out.
+// A PDF dropped just outside a target makes the browser open it and discard
+// the app. Swallow drops everywhere they are not wanted.
+['dragover','drop'].forEach(function (ev) {
+  window.addEventListener(ev, function (e) {
+    if (e.target.closest && e.target.closest('.mat-drop, #matBody, .drop, .photo-drop-zone, #siteDropZone')) return;
+    e.preventDefault();
+  }, false);
+});
+
 window.addEventListener('beforeunload', tlFlush);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') tlFlush(); });
 
