@@ -135,6 +135,24 @@
       .rl-where{grid-column:1/4}
     }
 
+    /* ── Stock picker & usage ── */
+    .sp-row{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;text-align:left;
+            background:#0B1219;border:1px solid #1A2A38;border-radius:8px;padding:11px 13px;margin-bottom:6px;
+            cursor:pointer;font-family:inherit;color:#DDE8EE}
+    .sp-row:hover{border-color:#4FB8D8;background:#0E1A24}
+    .sp-name{display:flex;flex-direction:column;gap:2px;font-size:13.5px;font-weight:700;min-width:0}
+    .sp-left{display:flex;flex-direction:column;gap:2px;text-align:right;font-size:14px;font-weight:800;
+             color:#7FD8F0;font-variant-numeric:tabular-nums;white-space:nowrap}
+    .sp-sub{font-size:11px;font-weight:600;color:#5F7A8A}
+    .drew{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:12.5px;
+          color:#DDE8EE;padding:7px 9px;background:#0A1620;border:1px solid #16283A;border-radius:6px;margin-bottom:5px}
+    .drew>span:last-child{color:#7FD8F0;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;
+                          display:flex;align-items:center;gap:6px}
+    .usage-head{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;text-align:left;
+                background:none;border:none;padding:13px;cursor:pointer;font-family:inherit;color:#DDE8EE}
+    .usage-head:hover{background:#0E1A24}
+    .usage-body{padding:0 13px 13px;border-top:1px solid #1A2A38}
+
     /* ── HVAC step card ── */
     .step{background:#0B1219;border:1px solid #1A2A38;border-radius:10px;padding:14px;margin-bottom:12px;
           display:flex;flex-direction:column;gap:12px;transition:border-color .15s}
@@ -382,7 +400,7 @@
       .mat-f input,.mat-cost,.mat-hrs,.mat-note,.hv-contract,
       .tl-addrow input,.tl-addrow select,
       .b7-row input,.b7-row select,
-      .step-in,.step-ta,.m-row input,.m-row select,.tm-in,.rl input,.rl select{font-size:16px!important}
+      .step-in,.step-ta,.m-row input,.m-row select,.tm-in,.rl input,.rl select,#spBody input{font-size:16px!important}
       /* Overlay heads wrap instead of overflowing */
       .b7-head,.tl-head{flex-wrap:wrap;gap:8px;padding:12px 14px}
       .b7-body,.tl-body{padding:12px}
@@ -1321,6 +1339,16 @@
   <div class="tl-body" id="tlBody"></div>
 </div>
 
+<div id="stockPicker" class="modal-wrap" style="display:none;z-index:130">
+  <div class="modal-box" style="max-width:460px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px">
+      <div id="spTitle" style="font-size:14px;font-weight:800;color:#7FD8F0"></div>
+      <button class="btn btn-gray" style="font-size:11px" onclick="closeStockPicker()">✕</button>
+    </div>
+    <div id="spBody"></div>
+  </div>
+</div>
+
 <div id="matPanel">
   <div class="tl-head" style="border-bottom-color:rgba(127,216,240,.22)">
     <div>
@@ -1340,6 +1368,7 @@
     <div class="tl-tab active" data-v="inbox" onclick="setMatView('inbox')">🧾 Receipts</div>
     <div class="tl-tab" data-v="stock" onclick="setMatView('stock')">📦 Truck stock</div>
     <div class="tl-tab" data-v="pot" onclick="setMatView('pot')">🫙 Consumables</div>
+    <div class="tl-tab" data-v="usage" onclick="setMatView('usage')">📊 Usage</div>
     <div class="tl-tab" data-v="catalog" onclick="setMatView('catalog')">📖 Known items</div>
   </div>
   <div class="tl-body" id="matBody"
@@ -2830,6 +2859,8 @@ function hvacStepHtml(u, it, kind) {
   const total = itemMaterialTotal(d);
   const hrs = Number(d.hours) || 0;
   const photos = d.photos || [];
+  const drawn = stepAllocs(u.id, it.key);
+  const stockCost = stepStockCost(u.id, it.key);
   const scope = kind === 'building'
     ? `<span class="step-scope">${(it.units && it.units.length) ? it.units.length + ' garages' : 'all garages'}</span>`
     : kind === 'unit' ? `<span class="step-scope">this garage</span>` : '';
@@ -2846,8 +2877,8 @@ function hvacStepHtml(u, it, kind) {
       </div>
     </div>
 
-    ${(total || hrs) ? `<div class="step-stats">
-      ${total ? `<span>🧾 ${money(total)}</span>` : ''}
+    ${(total + stockCost || hrs) ? `<div class="step-stats">
+      ${(total + stockCost) ? `<span>🧾 ${money(total + stockCost)}</span>` : ''}
       ${hrs ? `<span>⏱ ${fmtHrs(hrs)}</span>` : ''}
       ${photos.length ? `<span>📷 ${photos.length}</span>` : ''}
     </div>` : ''}
@@ -2878,7 +2909,20 @@ function hvacStepHtml(u, it, kind) {
     </div>
 
     <div class="step-sec">
-      <div class="step-lbl">Materials <span class="step-total">${total ? money(total) : ''}</span></div>
+      <div class="step-lbl">
+        <span>From the truck <span class="step-hint">${drawn.length ? drawn.length + ' item(s)' : 'nothing yet'}</span></span>
+        <span class="step-total">${stockCost ? money(stockCost) : ''}</span>
+      </div>
+      ${drawn.map(a => `<div class="drew">
+        <span>${escHtml(a.name)} <span class="sp-sub">${a.qty} ${escHtml(a.unit)}</span></span>
+        <span>${money(a.cost)}
+          <button class="m-x" title="Put it back on the truck" onclick="removeAlloc('${a.id}')">✕</button></span>
+      </div>`).join('')}
+      <button class="m-add" onclick="openStockPicker('${u.id}','${it.key}')">+ Pull from truck stock</button>
+    </div>
+
+    <div class="step-sec">
+      <div class="step-lbl">Bought for this step <span class="step-total">${total ? money(total) : ''}</span></div>
       ${mats.length ? `<div class="m-rows">${mats.map((m, i) => `
         <div class="m-row">
           <input class="m-name" placeholder="What it was" value="${escAttr(m.name || '')}"
@@ -3180,7 +3224,8 @@ function hvacJobTabHtml(u) {
     </div>`;
 
   // ── Material drawn from the truck, plus this garage's pot share ──
-  const drawn = matLive(MAT.allocs).filter(a => String(a.unitId) === String(u.id));
+  // Steps list their own draws; this is what was logged to the garage as a whole.
+  const drawn = matLive(MAT.allocs).filter(a => String(a.unitId) === String(u.id) && !(a.stepKey || ''));
   const potShare = unitConsumableCost(u.id);
   h += `<div class="hv-roll" style="margin-top:12px">
     <div class="hv-eq-head" style="border:none;padding-bottom:6px">
@@ -4121,25 +4166,125 @@ function setReorderAt(cid, val) {
 }
 
 // ── Drawing stock onto a garage ──
-function pullFromStock(unitId) {
+// ── Drawing stock onto a garage, and onto a step of the install ──
+// An allocation carries the step it was consumed on, so the same roll of wire
+// can be answered three ways: how much is left, how much went to 702, and
+// which part of the install used it.
+let spUnit = '', spStep = '', spLot = null, spFilter = '';
+
+function openStockPicker(unitId, stepKey) {
   const on = stockOnHand();
-  if (!on.length) { showToast('📦', 'Nothing on the truck yet — scan a receipt or add stock by hand'); return; }
-  const list = on.map((l, i) => `${i + 1}. ${l.name} — ${l.left} ${l.unit} left @ ${money(l.unitCost)}/${l.unit}`).join('\n');
-  const pick = prompt(`Pull onto garage #${unitId}:\n\n${list}\n\nEnter a number:`);
-  const idx = parseInt(pick, 10) - 1;
-  const lot = on[idx]; if (!lot) return;
-  const raw = prompt(`How much of the ${lot.name}?\n${lot.left} ${lot.unit} on hand.\n\nEnter a quantity, or h for half, a for all:`);
-  if (raw == null) return;
-  let qty = /^h/i.test(raw) ? lot.left / 2 : /^a/i.test(raw) ? lot.left : Number(String(raw).replace(/[^0-9.]/g, '')) || 0;
-  qty = Math.min(Math.round(qty * 1000) / 1000, lot.left);
-  if (qty <= 0) return;
-  const now = Date.now();
-  MAT.allocs.push({ id: matUid2('a'), unitId: String(unitId), lotId: lot.id, catalogId: lot.catalogId,
-                    name: lot.name, qty, unit: lot.unit, cost: Math.round(qty * lot.unitCost * 100) / 100,
-                    vendor: lot.vendor, receiptId: lot.receiptId, date: tlTodayISO(), created: now, updated: now });
-  persistMat(); drawPanel(); switchTab('hvacjob');
-  showToast('📦', qty + ' ' + lot.unit + ' of ' + lot.name + ' → #' + unitId);
+  if (!on.length) { showToast('📦', 'Nothing on the truck — scan a receipt or add stock by hand'); return; }
+  spUnit = String(unitId); spStep = stepKey || ''; spLot = null; spFilter = '';
+  document.getElementById('stockPicker').style.display = 'flex';
+  renderStockPicker();
 }
+function closeStockPicker() {
+  document.getElementById('stockPicker').style.display = 'none';
+  spLot = null;
+}
+function spSearch(v) { spFilter = String(v || '').toLowerCase(); renderStockPicker(); }
+function spPick(lotId) { spLot = stockOnHand().find(l => l.id === lotId) || null; renderStockPicker(); }
+function spBack() { spLot = null; renderStockPicker(); }
+function spSetQty(v) {
+  const el = document.getElementById('spQty'); if (!el || !spLot) return;
+  const n = v === 'all' ? spLot.left : v === 'half' ? spLot.left / 2 : v === 'quarter' ? spLot.left / 4 : Number(v) || 0;
+  el.value = Math.round(n * 1000) / 1000;
+  spUpdateCost();
+}
+function spUpdateCost() {
+  if (!spLot) return;
+  const q = Number((document.getElementById('spQty') || {}).value) || 0;
+  const el = document.getElementById('spCost');
+  if (el) el.textContent = money(Math.min(q, spLot.left) * spLot.unitCost);
+}
+function confirmStockPull() {
+  if (!spLot) return;
+  let qty = Number((document.getElementById('spQty') || {}).value) || 0;
+  qty = Math.min(Math.round(qty * 1000) / 1000, spLot.left);
+  if (qty <= 0) { showToast('⚠️', 'Enter how much you used'); return; }
+  const now = Date.now();
+  MAT.allocs.push({ id: matUid2('a'), unitId: spUnit, stepKey: spStep, lotId: spLot.id,
+                    catalogId: spLot.catalogId, name: spLot.name, qty, unit: spLot.unit,
+                    cost: Math.round(qty * spLot.unitCost * 100) / 100, vendor: spLot.vendor,
+                    receiptId: spLot.receiptId, date: tlTodayISO(), created: now, updated: now });
+  // Read what we need before closing — closing clears the selection.
+  const unit = spLot.unit, toUnit = spUnit, toStep = spStep;
+  persistMat();
+  closeStockPicker();
+  drawPanel(); switchTab('hvacjob');
+  showToast('📦', qty + ' ' + unit + ' → #' + toUnit + (toStep ? ' · logged to this step' : ''));
+}
+function renderStockPicker() {
+  const box = document.getElementById('spBody'); if (!box) return;
+  const stepName = spStep ? (stepLabel(spStep) || '') : '';
+  document.getElementById('spTitle').textContent =
+    'Pull from the truck → #' + spUnit + (stepName ? ' · ' + stepName : '');
+
+  if (!spLot) {
+    const on = stockOnHand().filter(l => !spFilter || l.name.toLowerCase().includes(spFilter));
+    box.innerHTML = `
+      <input id="spSearch" placeholder="Search the truck…" value="${escAttr(spFilter)}"
+        oninput="spSearch(this.value)" style="margin-bottom:10px">
+      ${on.length ? on.map(l => `
+        <button class="sp-row" onclick="spPick('${l.id}')">
+          <span class="sp-name">${escHtml(l.name)}
+            <span class="sp-sub">${escHtml(l.vendor || '')} · ${money(l.unitCost)}/${escHtml(l.unit)}</span></span>
+          <span class="sp-left">${Math.round(l.left * 100) / 100} ${escHtml(l.unit)}<span class="sp-sub">on hand</span></span>
+        </button>`).join('')
+        : `<div style="font-size:12px;color:#5A6A85;padding:8px 0">Nothing matches that.</div>`}`;
+    setTimeout(() => { const s = document.getElementById('spSearch'); if (s && spFilter) s.focus(); }, 20);
+    return;
+  }
+
+  box.innerHTML = `
+    <button class="btn btn-gray" style="font-size:11px;margin-bottom:12px" onclick="spBack()">← Back to the list</button>
+    <div style="font-size:15px;font-weight:700;color:#EDF2F6">${escHtml(spLot.name)}</div>
+    <div style="font-size:12px;color:#7A8C6A;margin-bottom:14px">
+      ${Math.round(spLot.left * 100) / 100} ${escHtml(spLot.unit)} on hand · ${money(spLot.unitCost)} per ${escHtml(spLot.unit)}
+    </div>
+    <div class="step-lbl">How much did this step use?</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+      <input id="spQty" inputmode="decimal" placeholder="0" oninput="spUpdateCost()"
+             style="flex:1;font-size:18px;text-align:right;font-weight:700">
+      <span style="font-size:14px;color:#7A8C6A;font-weight:700">${escHtml(spLot.unit)}</span>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+      <button class="btn btn-gray" style="font-size:11px" onclick="spSetQty('quarter')">¼</button>
+      <button class="btn btn-gray" style="font-size:11px" onclick="spSetQty('half')">½</button>
+      <button class="btn btn-gray" style="font-size:11px" onclick="spSetQty('all')">All of it</button>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px">
+      <span style="font-size:12px;color:#7A8C6A">Cost to this garage</span>
+      <span id="spCost" style="font-size:20px;font-weight:800;color:#7FD8F0;font-variant-numeric:tabular-nums">$0.00</span>
+    </div>
+    <button class="btn btn-tan" style="width:100%;font-size:13px" onclick="confirmStockPull()">Log it</button>`;
+  setTimeout(() => { const q = document.getElementById('spQty'); if (q) q.focus(); }, 30);
+}
+// Human name for a step key, for the picker title and the usage rollup.
+function stepLabel(key) {
+  for (const sec of CONST_SECTIONS) {
+    const it = sec.items.find(i => i.key === key);
+    if (it) return it.label;
+  }
+  const c = matLive(B7_CUSTOM).find(c => c.key === key);
+  if (c) return c.label;
+  for (const id of B7_UNIT_IDS) {
+    const u = DATA[id];
+    const ui = u && (u.constructionItems || []).find(i => i.key === key);
+    if (ui) return ui.label;
+  }
+  return '';
+}
+// What a single step drew from the truck on this garage.
+function stepAllocs(unitId, stepKey) {
+  return matLive(MAT.allocs).filter(a => String(a.unitId) === String(unitId) && (a.stepKey || '') === stepKey);
+}
+function stepStockCost(unitId, stepKey) {
+  return stepAllocs(unitId, stepKey).reduce((s, a) => s + (Number(a.cost) || 0), 0);
+}
+// Kept so the garage-level button still works; it simply logs with no step.
+function pullFromStock(unitId) { openStockPicker(unitId, ''); }
 function removeAlloc(aid) {
   const a = matLive(MAT.allocs).find(x => x.id === aid); if (!a) return;
   a.deleted = true; a.updated = Date.now();
@@ -4176,6 +4321,7 @@ function renderMat() {
   body.innerHTML = matView === 'inbox' ? matInboxHtml()
                  : matView === 'stock' ? matStockHtml()
                  : matView === 'pot'   ? matPotHtml()
+                 : matView === 'usage' ? matUsageHtml()
                  :                       matCatalogHtml();
 }
 
@@ -4356,6 +4502,69 @@ function matPotHtml() {
   h += `<div class="tl-sec-title">Split out (${out.length})</div>`;
   if (!out.length) h += `<div style="font-size:12px;color:#5A6A85">Nothing split yet.</div>`;
   out.forEach(s => { h += `<div class="mat-row"><span>#${escHtml(s.unitId)} <span style="color:#5F7A8A">· ${escHtml(s.note || '')} ${fmtDate(s.date)}</span></span><span>${money(s.amount)}</span></div>`; });
+  return h;
+}
+
+// Every item, answered three ways: how much has gone out in total, which
+// garages took it, and which step of the install consumed it.
+function usageByItem() {
+  const by = {};
+  matLive(MAT.allocs).forEach(a => {
+    const k = a.catalogId || a.name;
+    by[k] = by[k] || { name: a.name, unit: a.unit, qty: 0, cost: 0, byUnit: {}, byStep: {} };
+    const e = by[k];
+    e.qty += Number(a.qty) || 0;
+    e.cost += Number(a.cost) || 0;
+    const u = String(a.unitId);
+    e.byUnit[u] = e.byUnit[u] || { qty: 0, cost: 0 };
+    e.byUnit[u].qty += Number(a.qty) || 0;
+    e.byUnit[u].cost += Number(a.cost) || 0;
+    const sk = a.stepKey || '';
+    const sn = sk ? (stepLabel(sk) || 'Step') : 'Not tied to a step';
+    e.byStep[sn] = e.byStep[sn] || { qty: 0, cost: 0 };
+    e.byStep[sn].qty += Number(a.qty) || 0;
+    e.byStep[sn].cost += Number(a.cost) || 0;
+  });
+  return Object.values(by).sort((a, b) => b.cost - a.cost);
+}
+let usageOpen = '';
+function toggleUsage(name) { usageOpen = usageOpen === name ? '' : name; renderMat(); }
+
+function matUsageHtml() {
+  const items = usageByItem();
+  const total = items.reduce((s, i) => s + i.cost, 0);
+  const stepped = matLive(MAT.allocs).filter(a => a.stepKey).length;
+  const all = matLive(MAT.allocs).length;
+  let h = `<div class="hv-econ" style="margin-bottom:14px"><div class="hv-econ-grid">
+      <div class="hv-cell"><span class="hv-k">Material used</span><span class="hv-v" style="color:#7FD8F0">${money(total)}</span></div>
+      <div class="hv-cell"><span class="hv-k">Items</span><span class="hv-v">${items.length}</span></div>
+      <div class="hv-cell"><span class="hv-k">Still on truck</span><span class="hv-v">${money(stockValue())}</span></div>
+      <div class="hv-cell"><span class="hv-k">Tied to a step</span><span class="hv-v">${all ? Math.round(stepped / all * 100) : 0}%</span></div>
+    </div>
+    <div class="hv-econ-note">Tap an item to see which garages took it and which step of the install used it.</div>
+  </div>`;
+  if (!items.length) return h + `<div style="font-size:12px;color:#5A6A85">Nothing drawn yet. Pull from the truck on a step and it shows up here.</div>`;
+
+  items.forEach(i => {
+    const open = usageOpen === i.name;
+    h += `<div class="mat-card" style="padding:0;overflow:hidden">
+      <button class="usage-head" onclick="toggleUsage('${escAttr(i.name)}')">
+        <span class="sp-name">${escHtml(i.name)}
+          <span class="sp-sub">${Object.keys(i.byUnit).length} garage(s) · ${Object.keys(i.byStep).length} step(s)</span></span>
+        <span class="sp-left">${Math.round(i.qty * 100) / 100} ${escHtml(i.unit)}<span class="sp-sub">${money(i.cost)}</span></span>
+      </button>
+      ${open ? `<div class="usage-body">
+        <div class="step-lbl" style="margin-bottom:5px">By garage</div>
+        ${Object.entries(i.byUnit).sort((a, b) => b[1].cost - a[1].cost).map(([u, v]) => `
+          <div class="hv-eq-row"><span style="color:#90C8F0;cursor:pointer" onclick="openUnitFromTask('${u}')">#${escHtml(u)}</span>
+            <span>${Math.round(v.qty * 100) / 100} ${escHtml(i.unit)} · ${money(v.cost)}</span></div>`).join('')}
+        <div class="step-lbl" style="margin:10px 0 5px">By step</div>
+        ${Object.entries(i.byStep).sort((a, b) => b[1].cost - a[1].cost).map(([sn, v]) => `
+          <div class="hv-eq-row"><span>${escHtml(sn)}</span>
+            <span>${Math.round(v.qty * 100) / 100} ${escHtml(i.unit)} · ${money(v.cost)}</span></div>`).join('')}
+      </div>` : ''}
+    </div>`;
+  });
   return h;
 }
 
