@@ -3977,28 +3977,44 @@ async function diagnoseApi() {
     out.push('General internet: reachable');
   } catch (e) { out.push('General internet: BLOCKED (' + (e.message || e) + ')'); }
 
-  // Is the Anthropic host itself reachable? no-cors tells us the request left
-  // the machine even though we cannot read the reply.
-  try {
-    await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', mode: 'no-cors', body: '{}' });
-    out.push('api.anthropic.com: reachable — so this is a CORS refusal, not a block');
-  } catch (e) { out.push('api.anthropic.com: BLOCKED before it left the browser — an extension, or the network'); }
-
-  // And the real call, for the exact status
-  if (ANTHROPIC_API_KEY) {
+  if (AI_PROXY) {
+    // Only the proxy matters once one is set — probing the direct route would
+    // report a CORS refusal on a path nothing uses any more.
     try {
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01',
-                   'content-type': 'application/json', 'anthropic-dangerous-direct-browser-client': 'true' },
-        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 8,
-                               messages: [{ role: 'user', content: 'hi' }] }),
-      });
-      out.push('Real call: HTTP ' + r.status);
-      const j = await r.json().catch(() => null);
-      if (j && j.error) out.push('  → ' + j.error.type + ': ' + j.error.message);
-    } catch (e) { out.push('Real call: failed — ' + (e.message || e)); }
+      const r = await fetch(AI_PROXY, { method: 'GET' });
+      const t = await r.text();
+      out.push('Proxy reachable: HTTP ' + r.status);
+      if (/Hello World/i.test(t)) out.push('  → still the placeholder Worker; the code paste did not deploy');
+      else if (/method_not_allowed/.test(t)) out.push('  → your Worker code is live');
+    } catch (e) { out.push('Proxy reachable: NO — ' + (e.message || e) + ' (wrong URL?)'); }
+
+    try {
+      await aiFetch({ model: 'claude-haiku-4-5-20251001', max_tokens: 8,
+                      messages: [{ role: 'user', content: 'hi' }] });
+      out.push('Real call through the proxy: WORKS');
+    } catch (e) {
+      const m = String(e.message || e);
+      out.push('Real call through the proxy: failed — ' + m);
+      if (/not_configured/.test(m)) out.push('  → the Worker cannot see ANTHROPIC_API_KEY. Add it and redeploy the Worker.');
+      else if (/authentication/.test(m)) out.push('  → the key in Cloudflare is wrong, or has a stray space.');
+      else if (/forbidden_origin/.test(m)) out.push('  → this origin is not in the Worker allowlist.');
+    }
+  } else {
+    try {
+      await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', mode: 'no-cors', body: '{}' });
+      out.push('api.anthropic.com: reachable — so this is a CORS refusal, not a block');
+    } catch (e) { out.push('api.anthropic.com: BLOCKED before it left the browser'); }
+    if (ANTHROPIC_API_KEY) {
+      try {
+        await aiFetch({ model: 'claude-haiku-4-5-20251001', max_tokens: 8,
+                        messages: [{ role: 'user', content: 'hi' }] });
+        out.push('Real call: WORKS');
+      } catch (e) { out.push('Real call: failed — ' + (e.message || e)); }
+    } else {
+      out.push('Real call: skipped — no key and no proxy');
+    }
   }
+
   matLastError = out.join('\n');
   renderMat();
   showToast('🔬', 'Diagnosis on screen');
