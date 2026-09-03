@@ -3664,6 +3664,43 @@ let matScanBusy = false;
 let matReviewId = null;
 let matLastError = '';   // last real failure, shown on screen rather than only logged
 
+// ════════════════════════════════════════════════════════════
+// AI REQUESTS — through your own proxy when one is set
+// ════════════════════════════════════════════════════════════
+// Calling Anthropic straight from the page is at the mercy of every
+// extension, browser and network in the way, and it puts the key in browser
+// storage where anyone holding an unlocked phone can read it. With a proxy
+// URL set, the page sends no key at all — the proxy holds it.
+let AI_PROXY = lsGet('gota_ai_proxy') || '';
+function setAiProxy() {
+  const cur = AI_PROXY || '';
+  const v = prompt('Paste your AI proxy URL (a Cloudflare Worker URL).\n\nLeave blank to go back to calling Anthropic directly with a key in this browser.', cur);
+  if (v === null) return;
+  AI_PROXY = v.trim().replace(/\/+$/, '');
+  lsSet('gota_ai_proxy', AI_PROXY);
+  matLastError = '';
+  showToast('🔐', AI_PROXY ? 'Using your proxy — the key stays off this device' : 'Back to direct calls');
+  renderMat();
+}
+function aiReady() { return !!AI_PROXY || !!ANTHROPIC_API_KEY; }
+
+// One place every AI call goes through, so the proxy, the headers and the
+// error handling are not repeated five times with five slightly different bugs.
+async function aiFetch(payload) {
+  const url = AI_PROXY || 'https://api.anthropic.com/v1/messages';
+  const headers = { 'content-type': 'application/json' };
+  if (!AI_PROXY) {
+    headers['x-api-key'] = ANTHROPIC_API_KEY;
+    headers['anthropic-version'] = '2023-06-01';
+    headers['anthropic-dangerous-direct-browser-client'] = 'true';
+  }
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+  const data = await res.json().catch(() => null);
+  if (!data) throw new Error('HTTP ' + res.status + ' with no readable body');
+  if (data.error) throw new Error(data.error.type + ': ' + data.error.message);
+  return data;
+}
+
 const MAT_UNITS = ['ft', 'ea', 'roll', 'box', 'lb', 'gal', 'tube', 'bag', 'case'];
 const MAT_KINDS = [
   { v: 'stock',      label: 'Bulk → truck stock', hint: 'Carries across garages. Draw from it as you use it.' },
@@ -3831,7 +3868,7 @@ async function scanReceipt(file) {
     showToast('⚠️', 'Receipts need to be a PDF or a photo');
     return;
   }
-  if (!ANTHROPIC_API_KEY) { showToast('⚠️', 'Add your Anthropic key first (AI Search → set key)'); return; }
+  if (!aiReady()) { showToast('⚠️', 'Set a proxy URL or an API key first — see the banner in Materials'); return; }
 
   matScanBusy = true;
   matStatus('Reading ' + file.name + '…');
@@ -3854,15 +3891,8 @@ async function scanReceipt(file) {
       ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } }
       : { type: 'image', source: { type: 'base64', media_type: file.type || 'image/jpeg', data: b64 } };
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01',
-                 'content-type': 'application/json', 'anthropic-dangerous-direct-browser-client': 'true' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 3000,
-        messages: [{ role: 'user', content: [block, { type: 'text', text: RECEIPT_PROMPT }] }] }),
-    });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error.message);
+    const data = await aiFetch({ model: 'claude-haiku-4-5-20251001', max_tokens: 3000,
+      messages: [{ role: 'user', content: [block, { type: 'text', text: RECEIPT_PROMPT }] }] });
     const raw = (data.content?.[0]?.text || '').trim().replace(/^```json|^```|```$/g, '').trim();
     const parsed = JSON.parse(raw);
     if (parsed.error) throw new Error('could not read that receipt');
@@ -3931,7 +3961,8 @@ async function diagnoseApi() {
   out.push('Origin: ' + location.origin);
   out.push('Online: ' + navigator.onLine);
   out.push('Service worker controlling: ' + !!(navigator.serviceWorker && navigator.serviceWorker.controller));
-  out.push('Key set: ' + (ANTHROPIC_API_KEY ? 'yes (' + ANTHROPIC_API_KEY.slice(0, 7) + '…)' : 'NO'));
+  out.push('Route: ' + (AI_PROXY ? 'your proxy — ' + AI_PROXY : 'direct to Anthropic from this browser'));
+  out.push('Key in browser: ' + (ANTHROPIC_API_KEY ? 'yes' : 'no') + (AI_PROXY ? ' (not used — the proxy holds it)' : ''));
 
   // Can we reach anything at all on the open internet?
   try {
@@ -3970,27 +4001,16 @@ async function diagnoseApi() {
 // Separates "the key is wrong" from "the PDF could not be read", which look
 // identical from the outside.
 async function testApiKey() {
-  if (!ANTHROPIC_API_KEY) { showToast('🔑', 'No key set yet'); return; }
-  matStatus('Testing the key…');
+  if (!aiReady()) { showToast('🔑', 'No proxy URL and no key set'); return; }
+  matStatus('Testing…');
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01',
-                 'content-type': 'application/json', 'anthropic-dangerous-direct-browser-client': 'true' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 16,
-                             messages: [{ role: 'user', content: 'Reply with the word: ready' }] }),
-    });
-    const data = await res.json();
-    if (data.error) {
-      matLastError = data.error.type + ': ' + data.error.message;
-      showToast('❌', 'Key rejected — see the message on screen');
-    } else {
-      matLastError = '';
-      showToast('✅', 'Key works — HTTP ' + res.status);
-    }
+    await aiFetch({ model: 'claude-haiku-4-5-20251001', max_tokens: 16,
+                    messages: [{ role: 'user', content: 'Reply with the word: ready' }] });
+    matLastError = '';
+    showToast('✅', AI_PROXY ? 'Proxy works' : 'Key works');
   } catch (e) {
-    matLastError = 'Network or CORS: ' + (e.message || e);
-    showToast('❌', 'Could not reach the API — see the message on screen');
+    matLastError = (AI_PROXY ? 'Through your proxy: ' : 'Direct call: ') + (e.message || e);
+    showToast('❌', 'Failed — see the message on screen');
   }
   matStatus('');
   renderMat();
@@ -4150,19 +4170,20 @@ function matInboxHtml() {
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0">
           <button class="btn btn-gray" style="font-size:11px" onclick="diagnoseApi()">Diagnose</button>
-          <button class="btn btn-gray" style="font-size:11px" onclick="testApiKey()">Test key</button>
+          <button class="btn btn-gray" style="font-size:11px" onclick="setAiProxy()">Set proxy</button>
+          <button class="btn btn-gray" style="font-size:11px" onclick="testApiKey()">Test</button>
           <button class="btn btn-gray" style="font-size:11px" onclick="matLastError='';renderMat()">Dismiss</button>
         </div>
       </div>
     </div>`;
   }
-  if (!ANTHROPIC_API_KEY) {
+  if (!aiReady()) {
     h += `<div class="b7-alert" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-      <span>🔑 No API key set — receipts will upload but nothing will be read from them.</span>
+      <span>🔑 Receipt reading is not set up yet — files will upload but nothing will be read from them.</span>
       <span style="display:flex;gap:6px;flex-shrink:0">
-        <button class="btn btn-tan" style="font-size:11px" onclick="promptApiKey();renderMat()">Set API key</button>
-        <button class="btn btn-gray" style="font-size:11px" onclick="testApiKey()">Test key</button>
-        <button class="btn btn-gray" style="font-size:11px" onclick="diagnoseApi()">Diagnose</button>
+        <button class="btn btn-tan" style="font-size:11px" onclick="setAiProxy()">Set proxy URL</button>
+        <button class="btn btn-gray" style="font-size:11px" onclick="promptApiKey();renderMat()">Use a key instead</button>
+        <button class="btn btn-gray" style="font-size:11px" onclick="testApiKey()">Test</button>
       </span>
     </div>`;
   }
