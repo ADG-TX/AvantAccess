@@ -105,9 +105,49 @@
     .mat-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:9px;font-weight:800;
               color:#5F7A8A;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px}
     .mat-sum{color:#7FD8F0;font-weight:800;letter-spacing:0;font-size:11px;font-variant-numeric:tabular-nums}
-    .mat-entry{display:grid;grid-template-columns:104px 128px 84px minmax(0,1fr);gap:6px;align-items:end}
-    .mat-f select{background:#07090F;border:1px solid #16283A;color:#C8D0E0;border-radius:5px;
-                  padding:6px 8px;font-size:12px;width:100%;min-width:0}
+    /* ── HVAC step card ── */
+    .step{background:#0B1219;border:1px solid #1A2A38;border-radius:10px;padding:14px;margin-bottom:12px;
+          display:flex;flex-direction:column;gap:12px;transition:border-color .15s}
+    .step:focus-within{border-color:#2A5878}
+    .step-done{border-color:#24502F;background:#0A140E}
+    .step-head{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap}
+    .step-title{font-size:15px;font-weight:700;color:#EDF2F6;letter-spacing:-.01em;flex:1;min-width:140px;line-height:1.25}
+    .step-scope{font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#5F7A8A;
+                border:1px solid #22323F;border-radius:20px;padding:2px 7px;margin-left:6px;white-space:nowrap}
+    .step-head-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
+    .step-x{background:none;border:none;color:#8A5A5A;cursor:pointer;font-size:13px;font-weight:800;padding:2px 4px}
+    .step-stats{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;font-weight:700;color:#7FD8F0;
+                font-variant-numeric:tabular-nums;padding-bottom:2px}
+    .step-sec{display:flex;flex-direction:column;gap:6px}
+    .step-lbl{font-size:9px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#5F7A8A;
+              display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+    .step-hint{font-weight:600;letter-spacing:.02em;text-transform:none;color:#3E5460;font-size:10px}
+    .step-total{color:#7FD8F0;font-size:12px;letter-spacing:0;font-variant-numeric:tabular-nums}
+    .step-in,.step-ta{background:#07090F;border:1px solid #16283A;color:#DDE8EE;border-radius:7px;
+                      padding:9px 11px;font-size:13px;width:100%;font-family:inherit}
+    .step-ta{min-height:58px;resize:vertical;line-height:1.5}
+    .step-in:focus,.step-ta:focus{border-color:#4FB8D8}
+    /* Photo drop target */
+    .drop{display:flex;flex-wrap:wrap;gap:7px;padding:9px;border:1.5px dashed #22323F;border-radius:8px;
+          background:#080D12;transition:border-color .15s,background .15s;min-height:74px;align-items:center}
+    .drop.over{border-color:#4FB8D8;background:#0C1A24}
+    .drop .cs-photo{width:62px;height:62px}
+    .drop .cs-photo-add{width:62px;height:62px}
+    /* Material lines */
+    .m-rows{display:flex;flex-direction:column;gap:6px}
+    .m-row{display:grid;grid-template-columns:minmax(0,1fr) 140px 88px 26px;gap:6px;align-items:center}
+    .m-row input,.m-row select{background:#07090F;border:1px solid #16283A;color:#DDE8EE;border-radius:6px;
+                               padding:8px 9px;font-size:13px;width:100%;min-width:0;font-family:inherit}
+    .m-row input:focus,.m-row select:focus{border-color:#4FB8D8}
+    .m-cost{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;color:#7FD8F0!important}
+    .m-x{background:none;border:none;color:#8A5A5A;cursor:pointer;font-size:12px;font-weight:800;padding:0}
+    .m-add{align-self:flex-start;background:#0A1620;border:1px dashed #2A5878;color:#7FD8F0;border-radius:7px;
+           padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer}
+    .m-add:hover{border-color:#4FB8D8;background:#0E2030}
+    .step-foot{display:flex;gap:7px;flex-wrap:wrap;align-items:center;border-top:1px solid #16232E;padding-top:11px}
+    .step-hrs{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#5F7A8A;white-space:nowrap;font-weight:700}
+    .step-hrs input{width:62px;background:#07090F;border:1px solid #16283A;color:#DDE8EE;border-radius:6px;
+                    padding:7px 8px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
     .mat-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
     .tmr,.two-p{background:#0A1620;border:1px solid #2A5878;color:#7FD8F0;border-radius:5px;
                 padding:6px 11px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
@@ -151,9 +191,12 @@
              font-size:12px;color:#B8CEDA}
     .hv-jump:hover{border-color:#4FB8D8}
     @media(max-width:560px){
-      .mat-entry{grid-template-columns:1fr 1fr}
-      .mat-actions .tmr,.mat-actions .two-p{flex:1 1 auto;min-height:34px}
-      .mat-f-wide{grid-column:1/-1}
+      /* Material line stacks: name full width, then where + how much side by
+         side with the delete pinned to the end. */
+      .m-row{grid-template-columns:minmax(0,1fr) 88px 26px;row-gap:5px}
+      .m-row .m-name{grid-column:1/-1}
+      .step-foot .tmr,.step-foot .two-p{flex:1 1 auto;min-height:38px;text-align:center}
+      .step{padding:12px}
     }
 
     /* ── Building 7 Board (command center) ── */
@@ -304,7 +347,7 @@
       .mat-f input,.mat-cost,.mat-hrs,.mat-note,.hv-contract,
       .tl-addrow input,.tl-addrow select,
       .b7-row input,.b7-row select,
-      .mat-entry input{font-size:16px!important}
+      .mat-entry input,.step-in,.step-ta,.m-row input,.m-row select,.step-hrs input{font-size:16px!important}
       /* Overlay heads wrap instead of overflowing */
       .b7-head,.tl-head{flex-wrap:wrap;gap:8px;padding:12px 14px}
       .b7-body,.tl-body{padding:12px}
@@ -2481,21 +2524,28 @@ function constItem(u, key) {
   if (it.status === 'in_progress') it.status = 'incomplete';
   else if (it.status === 'done')   it.status = 'finished';
   if (typeof it.hours !== 'number') it.hours = Number(it.hours) || 0;
-  if (typeof it.materialCost !== 'number') it.materialCost = Number(it.materialCost) || 0;
-  if (typeof it.materialNote !== 'string') it.materialNote = it.materialNote ? String(it.materialNote) : '';
-  // Carry over anything logged under the earlier itemised system so no spend
-  // entered before this change is lost.
-  if (Array.isArray(it.materials) && it.materials.length) {
-    if (!it.materialCost) {
-      it.materialCost = it.materials.reduce((s, m) => s + (Number(m.qty) || 0) * (Number(m.price) || 0), 0);
+  if (typeof it.tip !== 'string') it.tip = it.tip ? String(it.tip) : '';
+
+  // Materials are a list of lines: what it was, what it cost, where from.
+  // Two earlier shapes get folded in so nothing already logged is lost —
+  // the quantity-times-price rows, and the single-figure-per-task version.
+  if (!Array.isArray(it.materials)) it.materials = [];
+  it.materials = it.materials.map(m => {
+    if (m && m.cost !== undefined) return m;                       // already current
+    if (m && (m.qty !== undefined || m.price !== undefined)) {      // qty x price era
+      return { id: m.id || matUid(), name: m.name || '', vendor: m.vendor || '',
+               cost: (Number(m.qty) || 0) * (Number(m.price) || 0) };
     }
-    if (!it.materialNote) {
-      it.materialNote = it.materials.map(m => m.name).filter(Boolean).join(', ');
-    }
-    delete it.materials;
+    return { id: matUid(), name: (m && m.name) || '', vendor: (m && m.vendor) || '', cost: 0 };
+  });
+  if (!it.materials.length && Number(it.materialCost) > 0) {        // single-figure era
+    it.materials.push({ id: matUid(), name: it.materialNote || 'Material',
+                        vendor: it.vendor || '', cost: Number(it.materialCost) });
   }
+  delete it.materialCost; delete it.materialNote; delete it.vendor;
   return it;
 }
+function matUid() { return 'm' + Date.now() + '_' + Math.floor(Math.random() * 10000); }
 
 // ════════════════════════════════════════════════════════════
 // MATERIALS & LABOR — what each task consumed, and what it cost
@@ -2511,9 +2561,11 @@ const MAT_VENDORS = [
   'Other',
 ];
 
-// Material spend is entered by hand, per task, per garage — the exact figure
-// off the receipt, not a quantity-times-price estimate.
-function itemMaterialTotal(d) { return Number(d.materialCost) || 0; }
+// Each line is a real thing you bought, at the figure off the receipt. The
+// task total is their sum — nothing is estimated from quantities.
+function itemMaterialTotal(d) {
+  return (d.materials || []).reduce((s, m) => s + (Number(m.cost) || 0), 0);
+}
 
 // ── Live timer ──
 // Typing hours after the fact means guessing. One timer runs at a time; the
@@ -2653,20 +2705,42 @@ function buildingTradeTotals(tradeId) {
   return { materials, hours, garages };
 }
 
-function setConstMaterialCost(key, value) {
+function addHvacMaterial(key) {
   const u = DATA[selectedId]; if (!u) return;
-  constItem(u, key).materialCost = Number(String(value).replace(/[^0-9.]/g, '')) || 0;
+  constItem(u, key).materials.push({ id: matUid(), name: '', vendor: '', cost: 0 });
+  constTouch(u); persist(); drawPanel(); switchTab(activeTab);
+  setTimeout(() => {
+    const rows = document.querySelectorAll(`[data-step="${key}"] .m-name`);
+    const last = rows[rows.length - 1]; if (last) last.focus();
+  }, 30);
+}
+function updateHvacMaterial(key, idx, field, value) {
+  const u = DATA[selectedId]; if (!u) return;
+  const m = constItem(u, key).materials[idx]; if (!m) return;
+  m[field] = field === 'cost' ? (Number(String(value).replace(/[^0-9.]/g, '')) || 0) : String(value || '');
+  constTouch(u); persist();
+  if (field === 'cost') { drawPanel(); switchTab(activeTab); }   // totals move
+}
+function deleteHvacMaterial(key, idx) {
+  const u = DATA[selectedId]; if (!u) return;
+  constItem(u, key).materials.splice(idx, 1);
   constTouch(u); persist(); drawPanel(); switchTab(activeTab);
 }
-function setConstMaterialNote(key, value) {
+function setConstTip(key, value) {
   const u = DATA[selectedId]; if (!u) return;
-  constItem(u, key).materialNote = String(value || '');
+  constItem(u, key).tip = String(value || '');
   constTouch(u); persist();
 }
-function setConstVendor(key, value) {
-  const u = DATA[selectedId]; if (!u) return;
-  constItem(u, key).vendor = String(value || '');
-  constTouch(u); persist(); drawPanel(); switchTab(activeTab);
+// Drag a photo straight out of Finder or Photos onto a step.
+function stepDragOver(e, el) { e.preventDefault(); el.classList.add('over'); }
+function stepDragLeave(el) { el.classList.remove('over'); }
+function handleStepDrop(e, key, el) {
+  e.preventDefault();
+  if (el) el.classList.remove('over');
+  const files = e.dataTransfer && e.dataTransfer.files;
+  if (!files || !files.length) return;
+  constPhotoKey = key;
+  handleConstPhotoInput(files);
 }
 // Spend split by supplier, for reconciling against QuickBooks.
 function vendorTotals(tradeId) {
@@ -2674,11 +2748,12 @@ function vendorTotals(tradeId) {
   B7_UNIT_IDS.forEach(id => {
     const u = DATA[id]; if (!u) return;
     tradeItems(u, tradeId).forEach(it => {
-      const d = constItem(u, it.key);
-      const c = Number(d.materialCost) || 0;
-      if (!c) return;
-      const v = d.vendor || 'Unassigned';
-      out[v] = (out[v] || 0) + c;
+      (constItem(u, it.key).materials || []).forEach(m => {
+        const c = Number(m.cost) || 0;
+        if (!c) return;
+        const v = m.vendor || 'Unassigned';
+        out[v] = (out[v] || 0) + c;
+      });
     });
   });
   return out;
@@ -2694,53 +2769,98 @@ function setHvacContract(value) {
   persist(); drawPanel(); switchTab(activeTab);
 }
 
-// What this task cost in material and time on this garage. Both typed in by
-// hand — the point is an exact figure per garage, not an estimate.
-function matBlockHtml(u, it) {
+// ── One HVAC step, as a self-contained card ──
+// Status, note, how-to, photos, materials and time in a fixed order, so every
+// step reads the same way and nothing is hunted for.
+function hvacStepHtml(u, it, kind) {
   const d = constItem(u, it.key);
-  const cost = Number(d.materialCost) || 0;
+  const meta = CONST_STATUS[d.status] || CONST_STATUS.not_started;
+  const isCustom = kind === 'building' || kind === 'unit';
+  const delFn = kind === 'unit' ? 'deleteUnitItem' : 'deleteConstCustom';
+  const mats = d.materials || [];
+  const total = itemMaterialTotal(d);
   const hrs = Number(d.hours) || 0;
   const running = !!d.timerStart;
   const live = running ? Math.round(timerElapsedHrs(d) * 100) / 100 : 0;
-  return `<div class="mat-wrap" data-mat-key="${it.key}">
-    <div class="mat-head">
-      <span>Material &amp; time on this garage</span>
-      <span class="mat-sum">${cost ? money(cost) : ''}${cost && hrs ? ' · ' : ''}${hrs ? hrs + ' hr' : ''}</span>
-    </div>
-    <div class="mat-entry">
-      <label class="mat-f">
-        <span>Material $</span>
-        <input class="mat-cost" value="${escAttr(cost || '')}" placeholder="0.00" inputmode="decimal"
-          onchange="setConstMaterialCost('${it.key}',this.value)">
-      </label>
-      <label class="mat-f">
-        <span>Bought at</span>
-        <select class="mat-vendor" onchange="setConstVendor('${it.key}',this.value)">
-          <option value="">—</option>
-          ${MAT_VENDORS.map(v => `<option value="${escAttr(v)}" ${v === (d.vendor || '') ? 'selected' : ''}>${escHtml(v)}</option>`).join('')}
+  const photos = d.photos || [];
+  const scope = kind === 'building'
+    ? `<span class="step-scope">${(it.units && it.units.length) ? it.units.length + ' garages' : 'all garages'}</span>`
+    : kind === 'unit' ? `<span class="step-scope">this garage</span>` : '';
+
+  return `<div class="step ${d.status === 'finished' ? 'step-done' : ''}" data-step="${it.key}">
+
+    <div class="step-head">
+      <div class="step-title">${escHtml(it.label)} ${scope}</div>
+      <div class="step-head-right">
+        <select class="cs-statsel ${meta.cls}" onchange="setConstStatus('${it.key}',this.value)">
+          ${CS_STATUSES.map(s => `<option value="${s.v}" ${s.v === d.status ? 'selected' : ''}>${s.label}</option>`).join('')}
         </select>
-      </label>
-      <label class="mat-f">
-        <span>Time (hrs)</span>
-        <input class="mat-hrs" value="${escAttr(hrs || '')}" placeholder="0" inputmode="decimal"
-          onchange="setConstHours('${it.key}',this.value)">
-      </label>
-      <label class="mat-f mat-f-wide">
-        <span>What it covered</span>
-        <input class="mat-note" value="${escAttr(d.materialNote || '')}" placeholder="optional — line set, whip, pump…"
-          onchange="setConstMaterialNote('${it.key}',this.value)">
-      </label>
+        ${isCustom ? `<button class="step-x" title="Remove this step" onclick="${delFn}('${it.key}')">✕</button>` : ''}
+      </div>
     </div>
-    <div class="mat-actions">
+
+    ${(total || hrs) ? `<div class="step-stats">
+      ${total ? `<span>🧾 ${money(total)}</span>` : ''}
+      ${hrs ? `<span>⏱ ${hrs} hr</span>` : ''}
+      ${photos.length ? `<span>📷 ${photos.length}</span>` : ''}
+    </div>` : ''}
+
+    <div class="step-sec">
+      <div class="step-lbl">Note</div>
+      <input class="step-in" placeholder="Anything worth remembering about this garage…"
+        value="${escAttr(d.note || '')}" onblur="saveConstNote('${it.key}', this.value)">
+    </div>
+
+    <div class="step-sec">
+      <div class="step-lbl">How-to / tip</div>
+      <textarea class="step-ta" placeholder="How you do this step — sequence, torque, clearances, the thing you forget every time…"
+        onblur="setConstTip('${it.key}', this.value)">${escHtml(d.tip || '')}</textarea>
+    </div>
+
+    <div class="step-sec">
+      <div class="step-lbl">Photos <span class="step-hint">drag them in, or tap to pick</span></div>
+      <div class="drop" ondragover="stepDragOver(event,this)" ondragleave="stepDragLeave(this)"
+           ondrop="handleStepDrop(event,'${it.key}',this)">
+        ${photos.map((p, pi) => `<div class="cs-photo">
+            <img src="${escAttr(p.url)}" loading="lazy" alt=""
+              onclick="openLightbox('${escAttr(p.url)}','${escAttr(escHtml(it.label))}')">
+            <button class="cs-photo-del" title="Delete photo" onclick="deleteConstPhoto('${it.key}',${pi})">✕</button>
+          </div>`).join('')}
+        <button class="cs-photo-add" onclick="triggerConstPhoto('${it.key}')" title="Add a photo">📷<span>Add</span></button>
+      </div>
+    </div>
+
+    <div class="step-sec">
+      <div class="step-lbl">Materials <span class="step-total">${total ? money(total) : ''}</span></div>
+      ${mats.length ? `<div class="m-rows">${mats.map((m, i) => `
+        <div class="m-row">
+          <input class="m-name" placeholder="What it was" value="${escAttr(m.name || '')}"
+            onchange="updateHvacMaterial('${it.key}',${i},'name',this.value)">
+          <select class="m-vendor" onchange="updateHvacMaterial('${it.key}',${i},'vendor',this.value)">
+            <option value="">Where…</option>
+            ${MAT_VENDORS.map(v => `<option value="${escAttr(v)}" ${v === (m.vendor || '') ? 'selected' : ''}>${escHtml(v)}</option>`).join('')}
+          </select>
+          <input class="m-cost" placeholder="0.00" inputmode="decimal" value="${escAttr(m.cost || '')}"
+            onchange="updateHvacMaterial('${it.key}',${i},'cost',this.value)">
+          <button class="m-x" title="Remove" onclick="deleteHvacMaterial('${it.key}',${i})">✕</button>
+        </div>`).join('')}</div>` : ''}
+      <button class="m-add" onclick="addHvacMaterial('${it.key}')">+ Add material</button>
+    </div>
+
+    <div class="step-foot">
       ${running
-        ? `<button class="tmr tmr-on" onclick="stopConstTimer('${it.key}')">⏹ Stop · ${live} hr running</button>`
+        ? `<button class="tmr tmr-on" onclick="stopConstTimer('${it.key}')">⏹ Stop · ${live} hr</button>`
         : `<button class="tmr" onclick="startConstTimer('${it.key}')">▶️ Start timer</button>`}
+      <label class="step-hrs">Total <input value="${escAttr(hrs || '')}" placeholder="0" inputmode="decimal"
+        onchange="setConstHours('${it.key}',this.value)"> hrs</label>
       <button class="two-p ${d.twoPerson ? 'on' : ''}" onclick="toggleTwoPerson('${it.key}')"
-        title="Flag tasks that need a second pair of hands so they can be batched into one visit">
+        title="Flag steps needing a second pair of hands so they can be batched">
         ${d.twoPerson ? '👥 Needs 2' : '👤 1 person'}</button>
     </div>
   </div>`;
 }
+
+
 
 function customItemsFor(sectionId, unitId) {
   return B7_CUSTOM.filter(c => !c.deleted && normSection(c.section) === sectionId &&
@@ -2879,7 +2999,6 @@ function constRowHtml(u, it, kind, withMoney) {
     });
     h += `<button class="cs-photo-add" onclick="triggerConstPhoto('${it.key}')" title="Add a photo of the completed work">📷<span>Add photo</span></button>`;
     h += `</div>`;
-    if (withMoney) h += matBlockHtml(u, it);
   }
   h += `</div>`;
   return h;
@@ -2988,9 +3107,9 @@ function hvacJobTabHtml(u) {
   // ── Tasks ──
   const builtins = sec.items.filter(it => !(it.corner && !corner));
   h += `<div class="cs-section" style="margin-bottom:10px">`;
-  builtins.forEach(it => h += constRowHtml(u, it, 'builtin', true));
-  customItemsFor('hvac', u.id).forEach(it => h += constRowHtml(u, it, 'building', true));
-  unitItemsFor(u, 'hvac').forEach(it => h += constRowHtml(u, it, 'unit', true));
+  builtins.forEach(it => h += hvacStepHtml(u, it, 'builtin'));
+  customItemsFor('hvac', u.id).forEach(it => h += hvacStepHtml(u, it, 'building'));
+  unitItemsFor(u, 'hvac').forEach(it => h += hvacStepHtml(u, it, 'unit'));
   h += `<button class="btn btn-gray" style="width:100%;font-size:11px;margin-top:2px;border-style:dashed;color:#8A7455" onclick="openAddInstallModal('hvac','${u.id}')" title="Add an HVAC task and pick which garages get it">+ Add HVAC task</button>`;
   h += `</div>`;
 
@@ -3224,7 +3343,7 @@ function handleConstPhotoInput(fileList) {
   if (files.length) uploadConstPhotoQueue(files, 0, selectedId, constPhotoKey);
 }
 function uploadConstPhotoQueue(files, index, unitId, key) {
-  if (index >= files.length) { showToast('📷', 'Photo added'); drawPanel(); switchTab('construction'); return; }
+  if (index >= files.length) { showToast('📷', 'Photo added'); drawPanel(); switchTab(activeTab); return; }
   const file = files[index];
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const path = `units/${unitId}/photos/${Date.now()}_${safeName}`;
@@ -3257,7 +3376,7 @@ function deleteConstPhoto(key, pi) {
   constTouch(u);
   persist();
   drawPanel();
-  switchTab('construction');
+  switchTab(activeTab);
   if (storage && p.path) { storage.ref(p.path).delete().catch(() => {}); }
 }
 
